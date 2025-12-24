@@ -1,0 +1,14 @@
+{
+  "name": "cheroma",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "clean": "find . -type d -maxdepth 3 -name 'node_modules' | xargs rm -rf",
+    "start": "pnpm --stream -r run start",
+    "dev": "pnpm --stream --parallel -r run dev",
+    "lint": "pnpm --stream -r run lint",
+    "api": "pnpm --filter api"
+  },
+  "author": "@servernoj",
+  "packageManager": "pnpm@10.18.1"
+}

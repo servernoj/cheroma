@@ -1,0 +1,24 @@
+{
+    "compilerOptions": {
+        "checkJs": true,
+        "strict": true,
+        "noImplicitAny": false,
+        "useUnknownInCatchVariables": false,
+        "strictNullChecks": false,
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "target": "esnext",
+        "baseUrl": "./",
+        "paths": {
+            "@/*": [
+                "./src/*"
+            ]
+        },
+        "resolveJsonModule": true,
+        "skipLibCheck": true
+    },
+    "include": [
+        "src/**/*.js",
+        "src/@types/**/*.d.ts"
+    ]
+}

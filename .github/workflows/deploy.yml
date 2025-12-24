@@ -1,0 +1,35 @@
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on:
+      - self-hosted
+      - cheroma
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --prod --frozen-lockfile
+
+      - name: Init env file
+        run: touch apps/api/.env
+
+      - name: Copy to predefined location
+        run: rsync -a --delete ./ $HOME/cheroma/
+
+      - name: Restart the service
+        run: sudo systemctl restart cheroma.service
