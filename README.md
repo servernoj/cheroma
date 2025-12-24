@@ -47,7 +47,7 @@ sudo systemctl start cheroma.service
 # Misc
 ```sh
 i2cset -y 1 0x40 0x00 0x10 # sleep
-i2cset -y 1 0x40 0xFE 0x79 # frequency b50Hz
+i2cset -y 1 0x40 0xFE 0x79 # frequency 50Hz
 i2cset -y 1 0x40 0x00 0x20 # wake up + set auto-inc
 i2cset -y 1 0x40 0x01 0x0C # set output + configure PWM reload logic
 

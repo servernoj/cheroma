@@ -1,12 +1,12 @@
-import * as motor from './motor.js'
-import * as ota from './ota.js'
-import * as buzzer from './buzzer.js'
-import * as relay from './relay.js'
-import * as firmware from './firmware.js'
-import * as wifi from './wifi.js'
-import * as system from './system.js'
 import i2c from '@/i2c-stub.js'
 
+const deviceAddr = 0x42
+
+/**
+ * Sleep for specified number of milliseconds
+ * @param {number} ms Sleep time
+ * @returns {Promise<void>}
+ */
 const sleep = (ms) => new Promise(
   resolve => {
     const timer = setTimeout(
@@ -19,69 +19,23 @@ const sleep = (ms) => new Promise(
   }
 )
 
-const bus = await i2c.openPromisified(1)
-
-const messageProcessor = async ({ target, method, args }) => {
-  switch (target) {
-    case 'buzzer': {
-      const handler = buzzer?.[method]
-      if (typeof handler === 'function') {
-        await handler(...args)
-      }
-      break
-    }
-    case 'motor': {
-      const handler = motor?.[method]
-      if (typeof handler === 'function') {
-        const result = await handler(...args)
-        return result
-      }
-      break
-    }
-    case 'relay': {
-      const handler = relay?.[method]
-      if (typeof handler === 'function') {
-        await handler(...args)
-      }
-      break
-    }
-    case 'i2c': {
-      const handler = bus?.[method]
-      switch (method) {
-        case '_readI2cBlock': {
-          const b = Buffer.alloc(4)
-          const [addr, reg] = args
-          await bus.readI2cBlock(addr, reg, 4, b)
-          return b
-        }
-        default: {
-          if (typeof handler === 'function') {
-            const result = await handler.call(bus, ...args)
-            return result
-          }
-        }
-      }
-      break
-    }
-    case 'tools': {
-      if (method === 'sleep') {
-        await sleep(args[0])
-      }
-      break
-    }
-    default:
-      throw new Error(`Unknown target in request: ${target}`)
-  }
+/**
+ * Write to an I2C register
+ * @param {number} regAddr Register address (0x00-0xFF)
+ * @param {Buffer} data Data to write (Buffer or array of bytes)
+ * @returns {Promise<void>}
+ */
+const writeRegister = async (regAddr, data) => {
+  const bus = await i2c.openPromisified(1)
+  const buffer = Buffer.from([
+    regAddr,
+    ...(data ?? Buffer.from([0xFF]))
+  ])
+  await bus.i2cWrite(deviceAddr, buffer.length, buffer)
+  await bus.close()
 }
 
 export {
-  messageProcessor,
   sleep,
-  motor,
-  ota,
-  buzzer,
-  relay,
-  firmware,
-  wifi,
-  system
+  writeRegister
 }
