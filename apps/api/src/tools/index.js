@@ -1,6 +1,6 @@
 import i2c from '@/i2c-stub.js'
 
-const deviceAddr = 0x42
+const deviceAddr = 0x40
 
 /**
  * Sleep for specified number of milliseconds

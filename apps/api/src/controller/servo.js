@@ -14,15 +14,15 @@ router.post(
 )
 
 router.post(
-  '/:channel/:ms',
+  '/channel',
   validator({
-    params: z.object({
-      channel: z.number().int().max(5),
-      ms: z.number().int()
+    body: z.object({
+      channel: z.number().int().max(5).min(0),
+      ms: z.number()
     })
   }),
   async (req, res) => {
-    const { channel, ms: pulseWidthMs } = res.locals.parsed.params
+    const { channel, ms: pulseWidthMs } = res.locals.parsed.body
     await servo.setChannel({ channel, pulseWidthMs })
     res.sendStatus(200)
   }
