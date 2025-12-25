@@ -39,10 +39,15 @@ WantedBy=multi-user.target
 **Note**: replace `<username>` with your actual username on RasPi
 
 Initialize the unit
-```sh
+```` sh
 sudo systemctl daemon-reload
 sudo systemctl start cheroma.service
-```
+````
+
+Use the following to monitor the logs at realtime
+```` sh
+journalctl -u cheroma -f
+```` 
 
 # Misc
 ```sh
