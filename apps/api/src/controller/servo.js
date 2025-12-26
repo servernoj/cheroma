@@ -18,12 +18,13 @@ router.post(
   validator({
     body: z.object({
       channel: z.number().int().max(5).min(0),
-      ms: z.number()
+      ms: z.number().default(0),
+      ticks: z.number().int().optional()
     })
   }),
   async (req, res) => {
-    const { channel, ms: pulseWidthMs } = res.locals.parsed.body
-    await servo.setChannel({ channel, pulseWidthMs })
+    const { channel, ms: pulseWidthMs, ticks } = res.locals.parsed.body
+    await servo.setChannel({ channel, pulseWidthMs, ticks })
     res.sendStatus(200)
   }
 )

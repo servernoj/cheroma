@@ -24,8 +24,10 @@ export const init = async () => {
   await writeRegister(REGS.MODE2, Buffer.from([0x0C]))
 }
 
-export const setChannel = async ({ channel, pulseWidthMs }) => {
+export const setChannel = async ({ channel, pulseWidthMs, ticks }) => {
   const off = Buffer.alloc(2)
-  off.writeUInt16LE(Math.round(pulseWidthMs * freq * 4096 / 1000))
+  const offTicks = ticks ?? Math.round(pulseWidthMs * freq * 4096 / 1000)
+  console.log({ channel, pulseWidthMs, offTicks })
+  off.writeUInt16LE(offTicks)
   await writeRegister(REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, ...off]))
 }
