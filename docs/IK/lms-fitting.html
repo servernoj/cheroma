@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Least-Squares (LM) Fit for Robot Calibration Parameters</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #7aa2ff;
+        --accent2: #9ef0c3;
+        --warn: #ffd27a;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 40px 18px 60px; }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      .subtitle { color: var(--muted); margin: 0 0 18px; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      h2 { font-size: 18px; margin: 4px 0 10px; }
+      h3 { font-size: 16px; margin: 16px 0 8px; }
+      ul, ol { margin: 8px 0 0 18px; }
+      li { margin: 6px 0; }
+      pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      pre {
+        background: rgba(14, 22, 48, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        overflow: auto;
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 10px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 12px;
+        margin-right: 8px;
+      }
+      .note {
+        border-left: 3px solid var(--accent2);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+      }
+      .warnbox {
+        border-left: 3px solid var(--warn);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+      }
+      footer { margin-top: 22px; color: var(--muted); font-size: 13px; }
+    </style>
+
+    <!-- MathJax for readable equations -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Least‑Squares (LM) Fit for Calibration Vector \(P\)</h1>
+      <p class="subtitle">
+        You collected \(N=50\) samples of <b>commanded servo values</b> \(u_i\) and <b>measured positions</b> \(x_i\).
+        This page describes how to estimate a finite parameter vector \(P\) using nonlinear least squares (Levenberg–Marquardt).
+      </p>
+
+      <div class="card">
+        <span class="pill">Data</span><span class="pill">Residuals</span><span class="pill">Jacobian</span><span class="pill">LM</span>
+        <h2>1) Define your calibration parameters \(P\)</h2>
+        <p>
+          A common 8‑parameter choice is per‑joint affine mapping (scale+offset):
+        </p>
+        <p>
+          \[
+            P = [s_1,s_2,s_3,s_4,\; o_1,o_2,o_3,o_4]^T
+          \]
+        </p>
+        <p>
+          with
+        </p>
+        <p>
+          \[
+            \theta_j = s_j\,u_j + o_j \qquad (j=1..4)
+          \]
+        </p>
+        <div class="note">
+          If you strongly trust the scale (\(s_j\approx 1\)), you can fit offsets only:
+          \(P=[o_1,o_2,o_3,o_4]\). Fewer parameters usually converges faster and is easier to identify.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2) Structure the dataset</h2>
+        <p>For each measurement \(i=1..N\):</p>
+        <ul>
+          <li>\(u_i = [u_{i1},u_{i2},u_{i3},u_{i4}]^T\) (servo commands you sent)</li>
+          <li>\(x_i = [X_i, Y_i, Z_i]^T\) (measured actual end‑effector position in base frame)</li>
+        </ul>
+        <p class="note">
+          You do <b>not</b> need the “desired” \(x^{des}\) used to generate \(u_i\). Calibration uses <b>command → measured</b>.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>3) Build the prediction model</h2>
+        <p>
+          Assume your link geometry is known. Implement forward kinematics:
+        </p>
+        <p>
+          \[
+            \hat{x} = FK(\theta)
+          \]
+        </p>
+        <p>
+          Compose it with the servo→angle mapping:
+        </p>
+        <p>
+          \[
+            \hat{x}_i(P) = FK(\theta(u_i, P))
+          \]
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>4) Define residuals and stack them into one vector</h2>
+        <p>
+          Residual for each sample:
+        </p>
+        <p>
+          \[
+            r_i(P) = \hat{x}_i(P) - x_i \in \mathbb{R}^3
+          \]
+        </p>
+        <p>
+          Stack all residuals into a single vector \(r(P)\in \mathbb{R}^{3N}\):
+        </p>
+        <p>
+          \[
+            r(P) =
+            \begin{bmatrix}
+              r_1(P) \\
+              r_2(P) \\
+              \vdots \\
+              r_N(P)
+            \end{bmatrix}
+          \]
+        </p>
+        <p>
+          Objective (sum of squared errors):
+        </p>
+        <p>
+          \[
+            P^\* = \arg\min_P \lVert r(P)\rVert^2
+          \]
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>5) Initialize \(P_0\) (this matters)</h2>
+        <ul>
+          <li>Typical start: \(s_j = 1\) for all joints</li>
+          <li>Offsets \(o_j\): your best guess from mechanical “home” tuning (or 0 if unknown)</li>
+        </ul>
+        <div class="warnbox">
+          If angles are in radians internally but your servo commands \(u\) are “degrees-like”, make sure \(s_j\) is initialized to the correct conversion factor.
+          Bad unit assumptions will look like “LM doesn’t converge”.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>6) Solve using Levenberg–Marquardt (LM)</h2>
+        <p class="muted">
+          LM minimizes \(\lVert r(P)\rVert^2\) by iteratively linearizing around the current \(P\).
+        </p>
+        <h3>Jacobian</h3>
+        <p>
+          Compute the Jacobian \(J(P) = \frac{\partial r}{\partial P} \in \mathbb{R}^{3N \times 8}\).
+        </p>
+        <ul>
+          <li><b>Numerical (finite differences)</b>: easiest, often sufficient for 8 params.</li>
+          <li><b>Analytical</b>: faster and more stable if you derive \(\partial FK / \partial \theta\) and chain rule through \(\theta(u,P)\).</li>
+        </ul>
+
+        <h3>LM update equation</h3>
+        <p>
+          Solve for \(\Delta P\):
+        </p>
+        <p>
+          \[
+            (J^T J + \lambda I)\,\Delta P = -J^T r
+          \]
+        </p>
+        <p>
+          Then update:
+        </p>
+        <p>
+          \[
+            P \leftarrow P + \Delta P
+          \]
+        </p>
+        <p class="note">
+          \(\lambda\) is adjusted: if the step reduces error, decrease \(\lambda\); otherwise increase \(\lambda\) and retry (this is the standard LM trust-region behavior).
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>7) Practical checks (so you know it worked)</h2>
+        <ol>
+          <li><b>Hold-out validation</b>: fit on ~80% of samples, report RMS error on remaining 20%.</li>
+          <li><b>RMS error</b>:
+            \[
+              \mathrm{RMS} = \sqrt{\frac{1}{N}\sum_{i=1}^{N} \lVert r_i(P^\*)\rVert^2}
+            \]
+          </li>
+          <li><b>Per-axis RMS</b>: compute RMS on X/Y/Z separately to see if one axis dominates.</li>
+          <li><b>Outliers</b>: if a few points are bad touches, consider a robust loss (Huber) or drop obvious outliers.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h2>8) How you use \(P^\*\) (no target pre-warp)</h2>
+        <p>
+          Use the calibrated mapping inside your IK/FK pipeline:
+        </p>
+        <ul>
+          <li>When solving IK for a desired position, solve for physical angles \(\theta\) using your calibrated model.</li>
+          <li>Convert \(\theta \rightarrow u\) using the inverse affine mapping:
+            \[
+              u_j = \frac{\theta_j - o_j}{s_j}
+            \]
+          </li>
+        </ul>
+        <div class="note">
+          Conceptually: <b>your robot model becomes “FK/IK + calibrated servo mapping”</b>. You don’t alter the target \(x\); you alter the model that interprets servo values.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Minimal pseudocode</h2>
+        <pre><code>Given data: (u_i, x_i) for i=1..N
+Choose parameterization P (8 params or 4 offsets)
+Initialize P = P0
+Repeat until convergence:
+  r = []
+  for i in 1..N:
+    theta = theta_from_servo(u_i, P)        # theta_j = s_j*u_j + o_j
+    x_hat = FK(theta)                       # predicted position
+    r.append(x_hat - x_i)                   # 3-vector
+  J = jacobian_of_r_wrt_P(P)                # numeric or analytic
+  Solve (J^T J + λ I) ΔP = -J^T r
+  If ||r(P + ΔP)|| < ||r(P)||:
+     P = P + ΔP; decrease λ
+  else:
+     increase λ and retry
+Return P*</code></pre>
+        <p class="note">
+          Implementation hint: if you want a ready-made solver, use a standard LM least-squares library (e.g., SciPy’s <code>least_squares</code>, Ceres Solver, g2o).
+        </p>
+      </div>
+
+      <footer>
+        File: <code>docs/IK/lms-fitting.html</code>. Open it in a browser for readable math.
+      </footer>
+    </div>
+  </body>
+</html>
