@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>4‑DOF Arm FK/IK (Base Yaw + 3 Parallel Pitch Joints)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --code: #0e1630;
+        --accent: #7aa2ff;
+        --accent2: #9ef0c3;
+        --border: rgba(255, 255, 255, 0.12);
+        --warn: #ffd27a;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 40px 18px 60px; }
+      header { margin-bottom: 22px; }
+      h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: 0.2px; }
+      .subtitle { color: var(--muted); margin: 0; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      h2 { font-size: 18px; margin: 4px 0 10px; color: #f2f6ff; }
+      h3 { font-size: 16px; margin: 16px 0 8px; color: #f2f6ff; }
+      ul, ol { margin: 8px 0 0 18px; }
+      li { margin: 6px 0; }
+      .pill {
+        display: inline-block;
+        padding: 2px 10px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 12px;
+        margin-right: 8px;
+      }
+      .note {
+        border-left: 3px solid var(--accent2);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+      }
+      .warnbox {
+        border-left: 3px solid var(--warn);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+      }
+      code, pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      pre {
+        background: rgba(14, 22, 48, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 12px;
+        overflow: auto;
+      }
+      .muted { color: var(--muted); }
+      .small { font-size: 13px; }
+      .toc a { text-decoration: none; }
+      .k { color: #d7defc; }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      @media (min-width: 940px) {
+        .grid { grid-template-columns: 1fr 1fr; }
+      }
+      footer { margin-top: 22px; color: var(--muted); font-size: 13px; }
+    </style>
+
+    <!-- MathJax renders equations in the browser -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>4‑DOF Arm FK/IK (Base Yaw + 3 Parallel Pitch Joints)</h1>
+        <p class="subtitle">
+          Rotary base + shoulder/elbow/wrist pitch. Lengths \(H, L_1, L_2, L_3\) (with gripper extension folded into \(L_3\)).
+          Includes: coordinate conventions, FK, IK (position + tool pitch), and PWM→angle sign/offset mapping.
+        </p>
+      </header>
+
+      <div class="card toc">
+        <span class="pill">Frames</span><span class="pill">FK</span><span class="pill">IK</span><span class="pill">PWM mapping</span>
+        <h2>Contents</h2>
+        <ul>
+          <li><a href="#defs">Definitions & conventions</a></li>
+          <li><a href="#servo">Servo pulse → joint angle mapping (handles reversed direction)</a></li>
+          <li><a href="#fk">Forward kinematics (FK)</a></li>
+          <li><a href="#ik">Inverse kinematics (IK) for \((x,y,z)\) + tool pitch</a></li>
+          <li><a href="#vertical-touch">Keeping a pen vertical + last motion straight down</a></li>
+          <li><a href="#notes">Notes for chessboard usage</a></li>
+        </ul>
+      </div>
+
+      <div id="defs" class="card">
+        <h2>Definitions & conventions</h2>
+        <h3>Geometry</h3>
+        <ul>
+          <li><span class="k">\(H\)</span>: height of the shoulder pitch axis above the base yaw axis origin.</li>
+          <li><span class="k">\(L_1\)</span>: shoulder→elbow length.</li>
+          <li><span class="k">\(L_2\)</span>: elbow→wrist pitch axis length.</li>
+          <li><span class="k">\(L_3\)</span>: wrist→TCP length (includes gripper extension; use an “effective” \(L_3\)).</li>
+        </ul>
+
+        <h3>World / base frame</h3>
+        <ul>
+          <li>Origin at base yaw axis on the table.</li>
+          <li>\(+Z\) is up.</li>
+          <li>At base yaw \(q_0=0\), the arm reaches along \(+X\) (toward higher ranks / farther side of board).</li>
+          <li>\(+Y\) points along files A→H (left→right when looking from the base toward the board).</li>
+        </ul>
+
+        <h3>Joint angles</h3>
+        <ul>
+          <li>\(q_0\): base yaw (about \(+Z\)).</li>
+          <li>\(q_1,q_2,q_3\): shoulder / elbow / wrist pitch (parallel axes, planar after yaw).</li>
+        </ul>
+        <div class="note small">
+          “Zero” pose per your servo neutrals:
+          \(q_1=0\Rightarrow L_1\) points up (\(+Z\));
+          \(q_2=0\Rightarrow L_2\) collinear with \(L_1\);
+          \(q_3=0\Rightarrow L_3\) collinear with \(L_2\).
+        </div>
+        <p class="muted small">
+          Define the in‑plane tool pitch angle (direction of \(L_3\) measured from +Z in the arm plane):
+          \[
+            \gamma = q_1 + q_2 + q_3
+          \]
+        </p>
+      </div>
+
+      <div id="servo" class="card">
+        <h2>Servo pulse → joint angle mapping (handles reversed direction)</h2>
+        <p class="muted">
+          FK/IK are defined in terms of physical joint angles \(q\) (right‑hand rule).
+          Separately, you need an actuator mapping between servo pulses \(p\) and those physical angles.
+        </p>
+
+        <h3>Simple linear model around 1.5 ms neutral</h3>
+        <p>
+          Let \(p_i\) be the servo pulse width in milliseconds and \(p_0=1.5\,\text{ms}\) be neutral. A common mapping is:
+        </p>
+        <p>
+          \[
+            q_i = k \, (p_i - p_0) + q_{trim,i}
+          \]
+        </p>
+        <ul class="small muted">
+          <li>\(k\): slope (radians per millisecond). It can be positive or negative depending on servo mounting direction.</li>
+          <li>If 1.0 ms ↔ −90° and 2.0 ms ↔ +90°, then \(k=\pi\) rad/ms (positive slope).</li>
+          <li>\(q_{trim,i}\): small calibration offset (fine‑tune “true zero”)</li>
+        </ul>
+
+        <h3>Recommended persistence: store physical angles in <code>cal_points</code> (no sign)</h3>
+        <p class="muted">
+          For clarity and to match common robotics conventions, we recommend storing calibration tables in the
+          <b>physical joint angle frame</b> (right‑hand rule angles used by FK/IK).
+          In this convention you do <b>not</b> store a separate <code>sign</code> and you do <b>not</b> need \(s_i\) in the mapping above.
+          The “direction inversion” is simply reflected by the fact that pulses may decrease as the physical angle increases.
+        </p>
+        <div class="note small">
+          Example: if a shoulder joint physically reaches \(+90^\circ\) at 880&nbsp;µs and \(-90^\circ\) at 2190&nbsp;µs, then
+          <code>cal_points</code> should store exactly those physical angles:
+          <pre><code>"shoulder": {
+  "channel": 1,
+  "cal_points": [
+    [-90.0, 2190],
+    [0.0, 1550],
+    [90.0, 880]
+  ]
+}</code></pre>
+        </div>
+      </div>
+
+      <div id="fk" class="card">
+        <h2>Forward kinematics (FK)</h2>
+        <p class="muted">
+          Compute the end-effector position \( (x,y,z) \) from joint angles \(q_0,q_1,q_2,q_3\).
+          The arm is planar in a vertical plane that is rotated by \(q_0\) around \(Z\).
+        </p>
+
+        <h3>Planar reach and height</h3>
+        <p class="muted small">
+          Let \(r\) be the horizontal (radial) distance from the base axis to the TCP.
+          With \(q=0\) meaning “up” (\(+Z\)):
+        </p>
+        <p>
+          \[
+            r =
+            L_1\sin(q_1) +
+            L_2\sin(q_1+q_2) +
+            L_3\sin(q_1+q_2+q_3)
+          \]
+        </p>
+        <p>
+          \[
+            z =
+            H +
+            L_1\cos(q_1) +
+            L_2\cos(q_1+q_2) +
+            L_3\cos(q_1+q_2+q_3)
+          \]
+        </p>
+
+        <h3>Rotate the plane by base yaw</h3>
+        <p>
+          \[
+            x = r\cos(q_0),\qquad y = r\sin(q_0)
+          \]
+        </p>
+        <div class="note small">
+          The in‑plane tool pitch is \(\gamma=q_1+q_2+q_3\). Later, when you add wrist roll, you’ll get yaw‑plane tool direction + a roll DOF.
+        </div>
+      </div>
+
+      <div id="ik" class="card">
+        <h2>Inverse kinematics (IK) for \((x,y,z)\) + tool pitch</h2>
+        <p class="muted">
+          Solve for \(q_0,q_1,q_2,q_3\) given a desired TCP position \((x,y,z)\) in the base frame and a desired in‑plane tool pitch \(\gamma\).
+          This matches your goal: keep the gripper pitched “down toward the board” while moving to a square.
+        </p>
+
+        <h3>Step 1 — base yaw and radial distance</h3>
+        <p>
+          \[
+            q_0 = \operatorname{atan2}(y,x),\qquad r = \sqrt{x^2+y^2}
+          \]
+        </p>
+
+        <h3>Step 2 — reduce to a 2‑link problem by removing \(L_3\)</h3>
+        <p class="muted small">
+          Work in the rotated arm plane coordinates \((r, z')\) where \(z' = z - H\).
+          If the last link \(L_3\) is constrained to pitch \(\gamma\), the wrist point \((r_w, z_w)\) is:
+        </p>
+        <p>
+          \[
+            r_w = r - L_3\sin(\gamma),\qquad
+            z_w = (z - H) - L_3\cos(\gamma)
+          \]
+        </p>
+
+        <h3>Step 3 — 2‑link IK for \(q_1,q_2\)</h3>
+        <p class="muted small">
+          Define:
+        </p>
+        <p>
+          \[
+            D=\frac{r_w^2+z_w^2 - L_1^2 - L_2^2}{2L_1L_2}
+          \]
+        </p>
+        <p class="muted small">
+          Reachability condition: \(|D|\le 1\). If not, the target is out of reach for the chosen \(\gamma\) (or due to joint limits).
+        </p>
+        <p>
+          \[
+            q_2 = \operatorname{atan2}\left(\pm\sqrt{1-D^2},\,D\right)
+          \]
+        </p>
+        <p class="muted small">
+          The \(\pm\) selects elbow‑up vs elbow‑down. For chess moves, you’ll usually pick the branch that avoids the table and avoids self-collision.
+        </p>
+        <p>
+          \[
+            q_1 =
+            \operatorname{atan2}(r_w, z_w)\;-\;
+            \operatorname{atan2}\left(L_2\sin q_2,\; L_1 + L_2\cos q_2\right)
+          \]
+        </p>
+
+        <h3>Step 4 — wrist pitch</h3>
+        <p>
+          \[
+            q_3 = \gamma - q_1 - q_2
+          \]
+        </p>
+
+        <div class="grid">
+          <div class="note small">
+            <div class="k">Joint limits</div>
+            Clamp/check \(q_1,q_2,q_3\) to your actual servo range (often around \(\pm 90^\circ\) from neutral, but mechanical limits may be tighter).
+          </div>
+          <div class="warnbox small">
+            <div class="k">“Gripper down” pitch</div>
+            Depending on how your gripper is mounted, “down toward the board” may correspond to \(\gamma\approx \pi\), \(\gamma\approx 0\), or \(\gamma\approx\) (some constant offset).
+            If the gripper is rigidly attached, you can encode this as a fixed offset \(\gamma = \gamma_{down} + \gamma_{task}\).
+          </div>
+        </div>
+
+        <h3>Implementation skeleton</h3>
+        <pre><code># Inputs: x,y,z (mm), gamma (rad), H,L1,L2,L3 (mm)
+# Output: q0,q1,q2,q3 (rad) for one IK branch
+
+q0 = atan2(y, x)
+r  = sqrt(x*x + y*y)
+
+rw = r - L3*sin(gamma)
+zw = (z - H) - L3*cos(gamma)
+
+D  = (rw*rw + zw*zw - L1*L1 - L2*L2) / (2*L1*L2)
+
+# if abs(D) > 1: unreachable
+
+q2 = atan2(+sqrt(1 - D*D), D)   # elbow-down branch; use -sqrt(...) for other branch
+q1 = atan2(rw, zw) - atan2(L2*sin(q2), L1 + L2*cos(q2))
+q3 = gamma - q1 - q2</code></pre>
+      </div>
+
+      <div id="vertical-touch" class="card">
+        <h2>Keeping a pen vertical + last motion straight down</h2>
+        <p class="muted">
+          Use this when you want the tool (pen / gripper approach) to stay at a fixed \((x,y)\) while you move only \(z\) for the final touch.
+          The idea is: keep base yaw \(q_0\) fixed, keep tool pitch \(\gamma\) fixed, and re-solve the planar IK for different heights.
+        </p>
+
+        <h3>1) Choose the “vertical down” pitch \(\gamma_{down}\)</h3>
+        <p class="muted small">
+          In this document’s convention, \(\gamma\) is measured from \(+Z\) in the arm plane.
+          If your tool axis is aligned with the direction of \(L_3\), then:
+        </p>
+        <ul class="small muted">
+          <li>tool up (\(+Z\)) corresponds to \(\gamma = 0^\circ\)</li>
+          <li>tool down (\(-Z\)) corresponds to \(\gamma = 180^\circ\)</li>
+        </ul>
+        <div class="warnbox small">
+          With typical hobby servos limited to about \(\pm 90^\circ\) per joint, \(\gamma \approx 180^\circ\) may be unreachable without a mounting offset.
+          In practice you often use \(\gamma_{down} = 180^\circ + \gamma_{mount}\) (a fixed constant) and/or accept a slightly tilted tool.
+        </div>
+
+        <h3>2) Hold \((x,y)\) constant by holding \(q_0\) and \(r\) constant</h3>
+        <p class="muted small">
+          For a target \((x,y)\) in the base frame:
+        </p>
+        <p>
+          \[
+            q_0 = \operatorname{atan2}(y,x),\qquad r=\sqrt{x^2+y^2}
+          \]
+        </p>
+        <p class="muted small">
+          During the final “straight down” move, keep \(q_0\) fixed and keep \((x,y)\) fixed (so \(r\) is fixed). Only \(z\) changes.
+        </p>
+
+        <h3>3) For each height \(z\), re-solve IK with fixed \(\gamma=\gamma_{down}\)</h3>
+        <p class="muted small">
+          Use the same wrist-point reduction as in the main IK section:
+        </p>
+        <p>
+          \[
+            r_w = r - L_3\sin(\gamma),\qquad
+            z_w = (z - H) - L_3\cos(\gamma)
+          \]
+        </p>
+        <p class="muted small">
+          Then solve the 2-link IK for \(q_1,q_2\), and compute \(q_3\) from \(\gamma\):
+        </p>
+        <p>
+          \[
+            D=\frac{r_w^2+z_w^2 - L_1^2 - L_2^2}{2L_1L_2}
+          \]
+        </p>
+        <p>
+          \[
+            q_2 = \operatorname{atan2}\left(\pm\sqrt{1-D^2},\,D\right)
+          \]
+        </p>
+        <p>
+          \[
+            q_1 =
+            \operatorname{atan2}(r_w, z_w)\;-\;
+            \operatorname{atan2}\left(L_2\sin q_2,\; L_1 + L_2\cos q_2\right)
+          \]
+        </p>
+        <p>
+          \[
+            q_3 = \gamma - q_1 - q_2
+          \]
+        </p>
+        <div class="note small">
+          To avoid sudden “elbow flips” during the descent, pick an elbow branch (the \(\pm\)) at the approach height and keep the same branch for all intermediate \(z\).
+        </div>
+
+        <h3>4) Practical execution pattern</h3>
+        <ul>
+          <li><span class="k">Approach</span>: solve IK at \((x,y,z_{high},\gamma_{down})\) and move there.</li>
+          <li><span class="k">Touch</span>: solve IK at \((x,y,z_{touch},\gamma_{down})\) and move there (only \(z\) changes).</li>
+          <li><span class="k">Retract</span>: return to \(z_{high}\) before moving laterally to another square.</li>
+        </ul>
+      </div>
+
+      <div id="notes" class="card">
+        <h2>Notes for chessboard usage</h2>
+        <ul>
+          <li>
+            <span class="k">Square → target</span>:
+            treat each square center as a fixed \((x,y)\) on the board plane, plus a small \(z\) for approach and a lower \(z\) for pickup.
+          </li>
+          <li>
+            <span class="k">Approach strategy</span>:
+            use 2–3 heights (above square, at grasp, lift) to avoid dragging pieces.
+          </li>
+          <li>
+            <span class="k">Branch selection</span>:
+            for each target, evaluate both elbow branches and pick the one that stays above the board and respects joint limits.
+          </li>
+          <li>
+            <span class="k">Later DOFs</span>:
+            wrist roll and gripper open/close can be layered on top; they do not change the position IK above.
+          </li>
+        </ul>
+        <div class="note small">
+          File created as <code>docs/IK/fk-ik-4dof.html</code>. Open it in a browser for clean math rendering.
+        </div>
+      </div>
+
+      <footer>
+        Tip: If you want offline viewing without internet, download MathJax locally and replace the CDN script tag.
+      </footer>
+    </div>
+  </body>
+</html>
