@@ -7,23 +7,15 @@ import z from 'zod'
 const router = express.Router()
 
 router.post(
-  '/init',
-  async (req, res) => {
-    await servo.init()
-    res.sendStatus(200)
-  }
-)
-
-router.post(
   '/home',
   validator({
-    body: z.object({
-      servos: z.enum(Object.keys(servo.calData.servos)).array().min(0).optional()
-    }).optional()
+    query: z.object({
+      slow: z.boolean().default(true)
+    })
   }),
   async (req, res) => {
-    const { servos } = res.locals.parsed.body ?? {}
-    await servo.home(servos)
+    const { slow } = res.locals.parsed.query
+    await servo.home(slow)
     res.sendStatus(200)
   }
 )
@@ -47,15 +39,33 @@ router.post(
   validator({
     body: z.object({
       channel: z.number().int().max(5).min(0),
-      ms: z.number().default(0),
-      ticks: z.number().int().optional()
+      pulseWidthUs: z.number().default(0),
     })
   }),
   async (req, res) => {
-    const { channel, ms: pulseWidthMs, ticks } = res.locals.parsed.body
-    await servo.setChannel({ channel, pulseWidthMs, ticks })
+    const { channel, us: pulseWidthUs } = res.locals.parsed.body
+    await servo.setChannel({ channel, pulseWidthUs })
     res.sendStatus(200)
   }
 )
+router.post(
+  '/to',
+  validator({
+    body: z.object({
+      to: z.record(
+        z.enum(Object.keys(servo.calData.servos)),
+        z.number()
+      ),
+      numPoints: z.number().int().default(100)
+    })
+  }),
+  async (req, res) => {
+    const { to, numPoints } = res.locals.parsed.body
+    await servo.to(to, numPoints)
+    res.sendStatus(200)
+  }
+)
+
+
 
 export default router

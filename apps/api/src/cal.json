@@ -2,7 +2,7 @@
   "units": { "pulse": "us", "angle": "deg" },
   "servos": {
     "base": {
-      "channel": 4,
+      "channel": 0,
       "calPoints": [
         [-90.0, 850],
         [0.0, 1550],
@@ -11,7 +11,7 @@
       "home": 0
     },
     "shoulder": {
-      "channel": 0,
+      "channel": 1,
       "calPoints": [
         [-90.0, 2190],
         [0.0, 1550],
@@ -20,7 +20,7 @@
       "home": -90
     },
     "elbow": {
-      "channel": 1,
+      "channel": 2,
       "calPoints": [
         [-90.0, 510],
         [0.0, 1470],
