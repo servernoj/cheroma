@@ -1,5 +1,5 @@
-import { sleep, throttler, writeRegister } from './index.js'
-import calData from '@/cal.json' with { type: 'json' }
+import { sleep, throttler, writeRegister } from './utils.js'
+import config from '@/config.json' with {type: 'json'}
 
 const REGS = {
   MODE1: 0x00,
@@ -19,8 +19,8 @@ const freq = 50
 /**
  * 
  * @param {number} angle Angle to interpolate pulseWidth for
- * @param {CalPoint} begin Begin of the interpolation segment
- * @param {CalPoint} end End of the interpolation segment
+ * @param {ServoCalPoint} begin Begin of the interpolation segment
+ * @param {ServoCalPoint} end End of the interpolation segment
  * @returns {number} 
  */
 const interp = (angle, begin, end) => {
@@ -34,7 +34,7 @@ const interp = (angle, begin, end) => {
 /**
  * 
  * @param {number} angleDeg angle to convert to pulse width
- * @param {Array<CalPoint>} sortedPoints Sorted array of calibration points (@see {@link CalPoint})
+ * @param {Array<ServoCalPoint>} sortedPoints Sorted array of calibration points (@see {@link ServoCalPoint})
  * @param {{clamp?: boolean}} options Options
  * @returns 
  */
@@ -70,7 +70,7 @@ const angleDegToPulseUsRaw = (angleDeg, sortedPoints, { clamp = true } = {}) => 
 }
 
 const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
-  const closure = Object.entries(calData.servos).reduce(
+  const closure = Object.entries(config.servos).reduce(
     (acc, [servoName, { calPoints }]) => {
       const sortedPoints = calPoints.slice().sort(
         (a, b) => a[0] - b[0]
@@ -168,11 +168,11 @@ const setChannels = async (channels) => {
  * @param {null | undefined | Array<string>} servos 
  */
 const relax = async (servos = null) => {
-  servos = servos ?? Object.keys(calData.servos)
+  servos = servos ?? Object.keys(config.servos)
   await Promise.all(
     servos.map(
       async servoName => {
-        const { channel } = calData.servos[servoName]
+        const { channel } = config.servos[servoName]
         await setChannel({ channel, pulseWidthUs: 0 })
       }
     )
@@ -181,7 +181,7 @@ const relax = async (servos = null) => {
 
 const home = async (slow = true) => {
   if (slow) {
-    const toPosition = Object.entries(calData.servos).reduce(
+    const toPosition = Object.entries(config.servos).reduce(
       (acc, [servoName, { home }]) => ({ ...acc, [servoName]: home }),
       {}
     )
@@ -189,9 +189,9 @@ const home = async (slow = true) => {
     await to(toPosition, 10)
   } else {
     await throttler({
-      array: Object.keys(calData.servos),
+      array: Object.keys(config.servos),
       handler: async servoName => {
-        const { channel, home } = calData.servos[servoName]
+        const { channel, home } = config.servos[servoName]
         await setChannel({
           channel,
           // @ts-ignore
@@ -264,14 +264,13 @@ const to = async (toPosition, numPoints = 2) => {
       const setChannelsData = Object.entries(point).map(
         ([servoName, angleDeg]) => {
           return {
-            channel: calData.servos[servoName].channel,
+            channel: config.servos[servoName].channel,
             // @ts-ignore
             pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
           }
         }
       )
       await setChannels(setChannelsData)
-      await sleep(50)
       currentPosition = point
     }
   })
@@ -285,5 +284,4 @@ export {
   home,
   relax,
   to,
-  calData
 }

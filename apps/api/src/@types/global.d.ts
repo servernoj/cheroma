@@ -1,28 +1,38 @@
-import { calData } from '@/tools/servo.js'
+import config from '@/config.json' with {type: 'json'}
 
 declare global {
   type SetChannel = {
     channel: number
     pulseWidthUs: number
   }
-  type CalPoint = [number, number]
-  type ServoName = keyof typeof calData['servos']
-  type ServoCalData = {
+  // --
+  type ServoCalPoint = [number, number]
+  type ServoName = keyof typeof config['servos']
+  type ServoData = {
     [name in ServoName]: {
       channel: number
       home: number
-      calPoints: Array<CalPoint>
+      calPoints: Array<ServoCalPoint>
     }
-  }
-  type CalData = {
-    units: {
-      pulse: 'us'
-      angle: 'deg'
-    }
-    servos: ServoCalData
   }
   type ServoPosition = {
     [name in ServoName]: number | null
+  }
+  // --
+  type SegmentName = keyof typeof config['segments']
+  type SegmentData = {
+    [name in SegmentName]: {
+      length: number
+    }
+  }
+  type Config = {
+    units: {
+      pulse: 'us'
+      angle: 'deg'
+      length: 'mm'
+    }
+    servos: ServoData
+    segments: SegmentData
   }
 }
 

@@ -1,5 +1,5 @@
 {
-  "units": { "pulse": "us", "angle": "deg" },
+  "units": { "pulse": "us", "angle": "deg", "length": "mm" },
   "servos": {
     "base": {
       "channel": 0,
@@ -36,6 +36,20 @@
         [90.0, 2550]
       ],
       "home": 90
+    }
+  },
+  "segments": {
+    "H": {
+      "length": 25
+    },
+    "L1": {
+      "length": 200
+    },
+    "L2": {
+      "length": 250
+    },
+    "L3": {
+      "length": 60
     }
   }
 }

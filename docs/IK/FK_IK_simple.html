@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FK/IK Simple Reference (4‑DOF: yaw + 3 pitch)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #7aa2ff;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 40px 18px 60px; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      h2 { font-size: 18px; margin: 14px 0 10px; }
+      p { margin: 8px 0; }
+      .muted { color: var(--muted); }
+      code { color: #d7defc; }
+      a { color: var(--accent); }
+      footer { margin-top: 18px; color: var(--muted); font-size: 13px; }
+    </style>
+
+    <!-- MathJax renders equations in the browser -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>FK/IK Simple Reference (4‑DOF: yaw + 3 pitch)</h1>
+        <p class="muted">
+          This page is a minimal reference for the forward kinematics used in the main document, plus the
+          common simplification when the tool pitch is constrained to \(\gamma=180^\circ\) (\(\gamma=\pi\)).
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Definitions</h2>
+        <ul class="muted">
+          <li>Joint angles: \(q_0\) = base yaw; \(q_1,q_2,q_3\) = shoulder/elbow/wrist pitch (parallel axes).</li>
+          <li>Link lengths: \(H\) (shoulder axis height), \(L_1,L_2,L_3\).</li>
+          <li>\(r\): horizontal (radial) distance from base axis to TCP in the arm plane.</li>
+          <li>Tool pitch in the arm plane: \(\gamma = q_1+q_2+q_3\).</li>
+        </ul>
+        <p class="muted">
+          Use radians in \(\sin(\cdot),\cos(\cdot)\). (If you store angles in degrees, convert before trig.)
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Forward kinematics (general \(\gamma\))</h2>
+        <p class="muted">Planar (in the rotated arm plane):</p>
+        <p>
+          \[
+            r = L_1\sin(q_1) + L_2\sin(q_1+q_2) + L_3\sin(q_1+q_2+q_3)
+          \]
+        </p>
+        <p>
+          \[
+            z = H + L_1\cos(q_1) + L_2\cos(q_1+q_2) + L_3\cos(q_1+q_2+q_3)
+          \]
+        </p>
+        <p class="muted">Rotate by base yaw to world coordinates:</p>
+        <p>
+          \[
+            x = r\cos(q_0),\qquad y = r\sin(q_0)
+          \]
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>FK with constrained tool pitch \(\gamma=180^\circ\) (\(\gamma=\pi\))</h2>
+        <p class="muted">
+          If you enforce \(\gamma=q_1+q_2+q_3=\pi\), then \(\sin(\gamma)=0\) and \(\cos(\gamma)=-1\), so the last link contributes
+          only a constant height shift \(-L_3\) and no radial reach.
+        </p>
+        <p>
+          \[
+            r = L_1\sin(q_1) + L_2\sin(q_1+q_2)
+          \]
+        </p>
+        <p>
+          \[
+            z = H - L_3 + L_1\cos(q_1) + L_2\cos(q_1+q_2)
+          \]
+        </p>
+        <p class="muted">And still:</p>
+        <p>
+          \[
+            x = r\cos(q_0),\qquad y = r\sin(q_0)
+          \]
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Inverse kinematics (IK) — step by step (assume \(\gamma=\pi\))</h2>
+        <p class="muted">
+          Assumptions for this derivation:
+          you already solved base yaw \(q_0\) from \((x,y)\), you reduced the problem to the arm plane,
+          and you constrain the tool pitch to \(\gamma=q_1+q_2+q_3=\pi\) (so \(q_3=\pi-q_1-q_2\)).
+          The remaining unknowns are \(q_1,q_2\).
+        </p>
+
+        <h2>1) Reduce 3D target \((x,y,z)\) to planar target \((r, z_2)\)</h2>
+        <p class="muted">
+          From the world position \((x,y)\), compute base yaw and radial distance:
+        </p>
+        <p>
+          \[
+            q_0 = \operatorname{atan2}(y,x),\qquad r=\sqrt{x^2+y^2}
+          \]
+        </p>
+        <p class="muted">
+          Under \(\gamma=\pi\), the FK becomes:
+        </p>
+        <p>
+          \[
+            r = L_1\sin(q_1) + L_2\sin(q_1+q_2)
+          \]
+        </p>
+        <p>
+          \[
+            z = H - L_3 + L_1\cos(q_1) + L_2\cos(q_1+q_2)
+          \]
+        </p>
+        <p class="muted">
+          Move known constants to the left by defining:
+        </p>
+        <p>
+          \[
+            z_2 = z - H + L_3
+          \]
+        </p>
+        <p class="muted">
+          Then the planar 2-link equations are:
+        </p>
+        <p>
+          \[
+            r = L_1\sin(q_1) + L_2\sin(q_1+q_2),\qquad
+            z_2 = L_1\cos(q_1) + L_2\cos(q_1+q_2)
+          \]
+        </p>
+
+        <h2>2) Solve for \(q_2\) using the law of cosines</h2>
+        <p class="muted">
+          Consider the triangle formed by link lengths \(L_1\), \(L_2\), and the distance from shoulder to the “wrist point”
+          \(\rho = \sqrt{r^2+z_2^2}\). By the law of cosines:
+        </p>
+        <p>
+          \[
+            \rho^2 = L_1^2 + L_2^2 + 2L_1L_2\cos(q_2)
+          \]
+        </p>
+        <p class="muted">
+          Rearranging gives:
+        </p>
+        <p>
+          \[
+            D = \cos(q_2) = \frac{r^2+z_2^2 - L_1^2 - L_2^2}{2L_1L_2}
+          \]
+        </p>
+        <p class="muted">
+          Reachability requires \(|D|\le 1\). Then there are two elbow branches:
+        </p>
+        <p>
+          \[
+            q_2 = \operatorname{atan2}\left(\pm\sqrt{1-D^2},\,D\right)
+          \]
+        </p>
+        <p class="muted">
+          If you must avoid the “elbow-down” configuration, do not hardcode the \(\pm\) sign. Instead, evaluate both candidates
+          and keep only the one that satisfies your constraint (e.g., elbow stays above the table).
+        </p>
+        <p class="muted">
+          A practical elbow-up selection rule:
+        </p>
+        <ul class="muted">
+          <li>Compute both candidates \(q_{2+}=\operatorname{atan2}(+\sqrt{1-D^2},D)\) and \(q_{2-}=\operatorname{atan2}(-\sqrt{1-D^2},D)\).</li>
+          <li>For each candidate, compute \(q_1\) (step 3 below), then compute the elbow height:
+            \[
+              z_{\text{elbow}} = H + L_1\cos(q_1)
+            \]
+          </li>
+          <li>Keep the solution with larger \(z_{\text{elbow}}\), or reject any solution with \(z_{\text{elbow}}\) below a clearance threshold.</li>
+        </ul>
+
+        <h2>3) Solve for \(q_1\) by splitting the planar angle into two parts</h2>
+        <p class="muted">
+          Define the direction from the shoulder to the wrist point in the \((r,z_2)\) plane:
+        </p>
+        <p>
+          \[
+            \alpha = \operatorname{atan2}(r, z_2)
+          \]
+        </p>
+        <p class="muted">
+          Define the internal “link angle”:
+        </p>
+        <p>
+          \[
+            \beta = \operatorname{atan2}\left(L_2\sin(q_2),\,L_1 + L_2\cos(q_2)\right)
+          \]
+        </p>
+        <p class="muted">
+          Then:
+        </p>
+        <p>
+          \[
+            q_1 = \alpha - \beta
+          \]
+        </p>
+
+        <h2>4) Recover \(q_3\) from the pitch constraint</h2>
+        <p>
+          \[
+            q_3 = \pi - q_1 - q_2
+          \]
+        </p>
+        <p class="muted">
+          Finally, check joint limits and prefer a consistent elbow branch to avoid sudden flips during motion.
+        </p>
+      </div>
+
+      <footer>
+        File: <code>docs/IK/FK_IK_simple.html</code>
+      </footer>
+    </div>
+  </body>
+</html>

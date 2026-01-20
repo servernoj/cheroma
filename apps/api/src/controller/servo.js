@@ -1,5 +1,6 @@
 import express from 'express'
-import * as servo from '@/tools/servo.js'
+import * as servo from '@/modules/servo.js'
+import config from '@/config.json' with {type: 'json'}
 import { validator } from '@/controller/mw/index.js'
 import z from 'zod'
 
@@ -24,7 +25,7 @@ router.post(
   '/relax',
   validator({
     body: z.object({
-      servos: z.enum(Object.keys(servo.calData.servos)).array().min(0).optional()
+      servos: z.enum(Object.keys(config.servos)).array().min(0).optional()
     }).optional()
   }),
   async (req, res) => {
@@ -53,7 +54,7 @@ router.post(
   validator({
     body: z.object({
       to: z.record(
-        z.enum(Object.keys(servo.calData.servos)),
+        z.enum(Object.keys(config.servos)),
         z.number()
       ),
       numPoints: z.number().int().default(100)
