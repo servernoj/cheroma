@@ -207,30 +207,99 @@
           <li>Keep the solution with larger \(z_{\text{elbow}}\), or reject any solution with \(z_{\text{elbow}}\) below a clearance threshold.</li>
         </ul>
 
-        <h2>3) Solve for \(q_1\) by splitting the planar angle into two parts</h2>
+        <h2>3) Solve for \(q_1\) using scalar projections</h2>
         <p class="muted">
-          Define the direction from the shoulder to the wrist point in the \((r,z_2)\) plane:
+          After you choose a valid \(q_2\), solve for \(q_1\) by expanding the planar FK into
+          “projections onto \(r\) and \(z_2\)” and then collapsing the result into a single angle.
+        </p>
+
+        <p class="muted">Start from the 2-link planar equations:</p>
+        <p>
+          \[
+            r = L_1\sin(q_1) + L_2\sin(q_1+q_2),\qquad
+            z_2 = L_1\cos(q_1) + L_2\cos(q_1+q_2)
+          \]
+        </p>
+
+        <p class="muted">Expand \(\sin(q_1+q_2)\) and \(\cos(q_1+q_2)\):</p>
+        <p>
+          \[
+            \sin(q_1+q_2)=\sin(q_1)\cos(q_2)+\cos(q_1)\sin(q_2)
+          \]
         </p>
         <p>
           \[
-            \alpha = \operatorname{atan2}(r, z_2)
+            \cos(q_1+q_2)=\cos(q_1)\cos(q_2)-\sin(q_1)\sin(q_2)
           \]
         </p>
-        <p class="muted">
-          Define the internal “link angle”:
+
+        <p class="muted">Substitute and group terms in \(\sin(q_1)\) and \(\cos(q_1)\):</p>
+        <p>
+          \[
+            r = (L_1+L_2\cos q_2)\,\sin q_1 + (L_2\sin q_2)\,\cos q_1
+          \]
         </p>
         <p>
           \[
-            \beta = \operatorname{atan2}\left(L_2\sin(q_2),\,L_1 + L_2\cos(q_2)\right)
+            z_2 = (L_1+L_2\cos q_2)\,\cos q_1 - (L_2\sin q_2)\,\sin q_1
           \]
         </p>
+
+        <p class="muted">Define two scalars (they depend on \(q_2\) but not on \(q_1\)):</p>
+        <p>
+          \[
+            A = L_1 + L_2\cos q_2,\qquad B = L_2\sin q_2
+          \]
+        </p>
+        <p class="muted">Then:</p>
+        <p>
+          \[
+            r = A\sin q_1 + B\cos q_1,\qquad z_2 = A\cos q_1 - B\sin q_1
+          \]
+        </p>
+
+        <h2>3a) Solve that as a linear system for \(\sin(q_1)\) and \(\cos(q_1)\)</h2>
         <p class="muted">
-          Then:
+          Let \(s=\sin(q_1)\) and \(c=\cos(q_1)\). Then:
         </p>
         <p>
           \[
-            q_1 = \alpha - \beta
+            r = A s + B c,\qquad z_2 = A c - B s
           \]
+        </p>
+        <p class="muted">
+          Combine the equations to eliminate \(c\) and \(s\):
+        </p>
+        <p>
+          \[
+            A r - B z_2 = (A^2+B^2)\,s
+            \quad\Rightarrow\quad
+            s = \frac{A r - B z_2}{A^2+B^2}
+          \]
+        </p>
+        <p>
+          \[
+            B r + A z_2 = (A^2+B^2)\,c
+            \quad\Rightarrow\quad
+            c = \frac{B r + A z_2}{A^2+B^2}
+          \]
+        </p>
+        <p class="muted">
+          Finally recover the angle using \(\operatorname{atan2}(\sin,\cos)\):
+        </p>
+        <p>
+          \[
+            q_1 = \operatorname{atan2}(s,\;c)
+            = \operatorname{atan2}\!\left(A r - B z_2,\; B r + A z_2\right)
+          \]
+        </p>
+        <p class="muted">
+          Why did \((A^2+B^2)\) disappear? Because \(\operatorname{atan2}\) is invariant to scaling by a positive constant:
+          \[
+            \operatorname{atan2}(k\,y,\;k\,x)=\operatorname{atan2}(y,\;x)\quad\text{for }k&gt;0
+          \]
+          and here \(k=\frac{1}{A^2+B^2}\) with \(A^2+B^2&gt;0\) (except the degenerate case \(L_1=L_2=0\)).
+          So dividing both \(s\) and \(c\) by the same positive factor does not change the angle \(q_1\).
         </p>
 
         <h2>4) Recover \(q_3\) from the pitch constraint</h2>

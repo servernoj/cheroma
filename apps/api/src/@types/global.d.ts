@@ -5,6 +5,17 @@ declare global {
     channel: number
     pulseWidthUs: number
   }
+  type KinematicsInput = {
+    q0: number
+    q1: number
+    q2: number
+    q3: number
+  }
+  type KinematicsOutput = {
+    x: number
+    y: number
+    z: number
+  }
   // --
   type ServoCalPoint = [number, number]
   type ServoName = keyof typeof config['servos']
