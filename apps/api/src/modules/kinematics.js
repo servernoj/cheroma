@@ -20,10 +20,10 @@ const d2r = d => d * Math.PI / 180
  * @param {KinematicsInput} args
  * @returns {KinematicsOutput}
  */
-const FK = ({ q0, q1, q2, q3 }) => {
-  const { L1, L2, L3, H } = L
-  const r = L1 * Math.sin(d2r(q1)) + L2 * Math.sin(d2r(q1 + q2)) + L3 * Math.sin(d2r(q1 + q2 + q3))
-  const z = H + L1 * Math.cos(d2r(q1)) + L2 * Math.cos(d2r(q1 + q2)) + L3 * Math.cos(d2r(q1 + q2 + q3))
+const FK = ({ q0, q1, q2 }) => {
+  const { L1, L2, L3, H, dX } = L
+  const r = (dX * Math.cos(d2r(q1)) + L1 * Math.sin(d2r(q1))) + L2 * Math.sin(d2r(q1 + q2))
+  const z = H - L3 - dX * Math.sin(d2r(q1)) + L1 * Math.cos(d2r(q1)) + L2 * Math.cos(d2r(q1 + q2))
   const x = r * Math.cos(d2r(q0))
   const y = r * Math.sin(d2r(q0))
   return {
@@ -39,13 +39,12 @@ const FK = ({ q0, q1, q2, q3 }) => {
  * @returns {KinematicsInput}
  */
 const IK = ({ x, y, z }) => {
-  const { L1, L2, L3, H } = L
-  const gamma = 180
-  const gamma_r = d2r(gamma)
-  const q0 = r2d(Math.atan2(y, x))
+  const { L1, L2, L3, H, dX } = L
+  const q0 = Math.atan2(y, x)
   const r = Math.hypot(x, y)
-  const rw = r - L3 * Math.sin(gamma_r)
-  const zw = (z - H) - L3 * Math.cos(gamma_r)
+  const rw = r
+  const zw = (z - H) + L3
+  // -- Initial guess assuming dX = 0
   const D = Math.max(
     -1,
     Math.min(
@@ -69,12 +68,32 @@ const IK = ({ x, y, z }) => {
     q1 => H + L1 * Math.cos(q1)
   )
   const idx = z_elbow[0] > z_elbow[1] ? 0 : 1
-  const [q1, q2] = [
-    r2d(q1_r[idx]),
-    r2d(q2_r[idx])
-  ]
-  const q3 = gamma - q1 - q2
-  return { q0, q1, q2, q3 }
+  let [q1, q2] = [q1_r[idx], q2_r[idx]]
+  const epsilon = 1e-4
+  // -- Numerical solution by Newton method for actual dX
+  for (let i = 0; i < 100; i++) {
+    const fr = dX * Math.cos(q1) + L1 * Math.sin(q1) + L2 * Math.sin(q1 + q2) - rw
+    const fz = -dX * Math.sin(q1) + L1 * Math.cos(q1) + L2 * Math.cos(q1 + q2) - zw
+    const error = Math.hypot(fr, fz)
+    if (error < epsilon) {
+      break
+    }
+    // Jacobian J = df/d[q1,q2]
+    const J11 = -dX * Math.sin(q1) + L1 * Math.cos(q1) + L2 * Math.cos(q1 + q2)
+    const J12 = L2 * Math.cos(q1 + q2)
+    const J21 = -dX * Math.cos(q1) - L1 * Math.sin(q1) - L2 * Math.sin(q1 + q2)
+    const J22 = -L2 * Math.sin(q1 + q2)
+    const det = J11 * J22 - J12 * J21
+    q1 += - (J22 * fr - J12 * fz) / det
+    q2 += - (-J21 * fr + J11 * fz) / det
+  }
+  const q3 = Math.PI - q1 - q2
+  return {
+    q0: r2d(q0),
+    q1: r2d(q1),
+    q2: r2d(q2),
+    q3: r2d(q3)
+  }
 }
 
 export { FK, IK }

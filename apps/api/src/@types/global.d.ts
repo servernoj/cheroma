@@ -1,7 +1,6 @@
 import config from '@/config.json' with {type: 'json'}
 
 declare global {
-  type A = 'a' | 'b'
   type SetChannel = {
     channel: number
     pulseWidthUs: number
