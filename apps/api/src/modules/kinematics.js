@@ -41,23 +41,28 @@ const FK = ({ q0, q1, q2, q3 }) => {
 const IK = ({ x, y, z }) => {
   const { L1, L2, L3, H } = L
   const gamma = 180
-  const q0 = Math.atan2(y, x)
-  const r_squared = x * x + y * y
-  const r = Math.sqrt(r_squared)
-  const z2 = z - H + L3
-  const D = (r_squared + z2 * z2 - L1 * L1 - L2 * L2) / (2 * L1 * L2)
-  if (Math.abs(D) > 1) {
-    throw new Error('Position unreachable')
-  }
+  const gamma_r = d2r(gamma)
+  const q0 = r2d(Math.atan2(y, x))
+  const r = Math.hypot(x, y)
+  const rw = r - L3 * Math.sin(gamma_r)
+  const zw = (z - H) - L3 * Math.cos(gamma_r)
+  const D = Math.max(
+    -1,
+    Math.min(
+      1,
+      (rw * rw + zw * zw - L1 * L1 - L2 * L2) / (2 * L1 * L2)
+    )
+  )
+  const s = Math.sqrt(1 - D * D)
   const q2_r = [
-    Math.atan2(+Math.sqrt(1 - D * D), D),
-    Math.atan2(-Math.sqrt(1 - D * D), D)
+    Math.atan2(+s, D),
+    Math.atan2(-s, D)
   ]
   const q1_r = q2_r.map(
     q2 => {
       const A = L1 + L2 * Math.cos(q2)
       const B = L2 * Math.sin(q2)
-      return Math.atan2(A * r - B * z2, B * r + A * z2)
+      return Math.atan2(A * rw - B * zw, B * rw + A * zw)
     }
   )
   const z_elbow = q1_r.map(
@@ -71,12 +76,5 @@ const IK = ({ x, y, z }) => {
   const q3 = gamma - q1 - q2
   return { q0, q1, q2, q3 }
 }
-
-console.log(FK({
-  q0: -60,
-  q1: 90,
-  q2: 0,
-  q3: 0
-}))
 
 export { FK, IK }

@@ -40,16 +40,16 @@
   },
   "segments": {
     "H": {
-      "length": 100
+      "length": 130
     },
     "L1": {
-      "length": 200
+      "length": 230
     },
     "L2": {
-      "length": 150
+      "length": 265
     },
     "L3": {
-      "length": 10
+      "length": 86
     }
   }
 }
