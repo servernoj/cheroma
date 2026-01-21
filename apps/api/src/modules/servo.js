@@ -8,13 +8,30 @@ const REGS = {
   BASE: 0x06
 }
 
-/**
- * @type {Partial<ServoPosition>}
- */
-let currentPosition = {}
-
 // PWM frequency
 const freq = 50
+// Determines number of intermediate points for `pathPlanner` function
+const degPerPathSegment = 10
+// Servo names as array
+/** @type {Array<ServoName>} */
+// @ts-ignore
+const servoNames = Object.keys(config.servos)
+
+/**
+ * @returns {ServoPosition}
+ */
+const getHomePosition = () => Object.entries(config.servos).reduce(
+  /** * @param {*} acc */
+  (acc, [servoName, { home }]) => {
+    return {
+      ...acc,
+      [servoName]: home
+    }
+  },
+  {}
+)
+
+let currentPosition = getHomePosition()
 
 /**
  * 
@@ -179,22 +196,16 @@ const relax = async (servos = null) => {
   )
 }
 
-const home = async (slow = true) => {
+const toHome = async (slow = true) => {
   if (slow) {
-    const toPosition = Object.entries(config.servos).reduce(
-      (acc, [servoName, { home }]) => ({ ...acc, [servoName]: home }),
-      {}
-    )
-    // @ts-ignore
-    await to(toPosition, 10)
+    await toPoint(getHomePosition())
   } else {
     await throttler({
-      array: Object.keys(config.servos),
+      array: servoNames,
       handler: async servoName => {
         const { channel, home } = config.servos[servoName]
         await setChannel({
           channel,
-          // @ts-ignore
           pulseWidthUs: angleDegToPulseUs({ angleDeg: home, servoName })
         })
         await sleep(200)
@@ -202,42 +213,42 @@ const home = async (slow = true) => {
       },
       bulkSize: 1
     })
+    await relax()
   }
 }
 
 /**
- * @param {Partial<ServoPosition>} from a point to start from
- * @param {Partial<ServoPosition>} to a point to land at
- * @param {number} numPoints total number of path points including `from` and `to`
- * @returns {Array<Partial<ServoPosition>>} array of intermediate points
+ * @param {ServoPosition} from a point to start from
+ * @param {ServoPosition} to a point to land at
  */
-const pathPlanner = (from, to, numPoints = 2) => {
-  const fromServoNames = Object.keys(from)
-  const toServoNames = Object.keys(to)
-  if (
-    !fromServoNames.every(servoName => toServoNames.includes(servoName)) ||
-    !toServoNames.every(servoName => fromServoNames.includes(servoName))
-  ) {
-    throw new Error('Both `from` and `to` points should reference exact same servos')
-  }
-  const deltas = fromServoNames.reduce(
+const pathPlanner = (from, to) => {
+  // -- determine the longest path
+  const longestPathDeg = servoNames.reduce(
     (acc, servoName) => {
-      acc[servoName] = from[servoName] === null || to[servoName] === null
-        ? null
-        : (to[servoName] - from[servoName]) / (numPoints - 1)
+      const candidate = Math.abs(to[servoName] - from[servoName])
+      if (candidate > acc) {
+        acc = candidate
+      }
+      return acc
+    },
+    0
+  )
+  const numPoints = Math.ceil(longestPathDeg / degPerPathSegment) + 1
+  const deltas = servoNames.reduce(
+    (acc, servoName) => {
+      acc[servoName] = (to[servoName] - from[servoName]) / (numPoints - 1)
       return acc
     },
     {}
   )
+  /** @type {Array<ServoPosition>} */
   const points = Array(numPoints).fill().map(
     (_, idx) => {
       if (!idx) {
         return from
       }
-      return fromServoNames.reduce(
-        /**
-         * @param {Partial<ServoPosition>} acc 
-         */
+      return servoNames.reduce(
+        /** @param {*} acc */
         (acc, servoName) => {
           acc[servoName] = from[servoName] === null || to[servoName] === null
             ? null
@@ -253,27 +264,28 @@ const pathPlanner = (from, to, numPoints = 2) => {
 
 /**
  * @param {ServoPosition} toPosition final position (angles in deg) to move servos
- * @param {number} [numPoints]  total number of path points
  */
-const to = async (toPosition, numPoints = 2) => {
-  const points = pathPlanner(currentPosition, toPosition, numPoints)
+const toPoint = async (toPosition) => {
+  const points = pathPlanner(currentPosition, toPosition)
   await throttler({
     array: points,
     bulkSize: 1,
     handler: async (point) => {
       const setChannelsData = Object.entries(point).map(
+        /** @param {*} arg*/
         ([servoName, angleDeg]) => {
           return {
             channel: config.servos[servoName].channel,
-            // @ts-ignore
             pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
           }
         }
       )
       await setChannels(setChannelsData)
+      await sleep(10)
       currentPosition = point
     }
   })
+  await relax()
 }
 
 
@@ -281,7 +293,7 @@ export {
   setChannel,
   setChannels,
   init,
-  home,
+  toHome,
   relax,
-  to,
+  toPoint,
 }

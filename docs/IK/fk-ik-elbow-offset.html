@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FK/IK with Elbow-Axis Offset dX (4‑DOF: yaw + 3 pitch)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #7aa2ff;
+        --accent2: #9ef0c3;
+        --warn: #ffd27a;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 40px 18px 60px; }
+      header { margin-bottom: 18px; }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      h2 { font-size: 18px; margin: 14px 0 10px; color: #f2f6ff; }
+      h3 { font-size: 16px; margin: 14px 0 8px; color: #f2f6ff; }
+      p { margin: 8px 0; }
+      ul, ol { margin: 8px 0 0 18px; }
+      li { margin: 6px 0; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      .muted { color: var(--muted); }
+      .note {
+        border-left: 3px solid var(--accent2);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .warnbox {
+        border-left: 3px solid var(--warn);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      pre, code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      pre {
+        background: rgba(14, 22, 48, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        overflow: auto;
+      }
+      footer { margin-top: 18px; color: var(--muted); font-size: 13px; }
+    </style>
+
+    <!-- MathJax renders equations in the browser -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="card">
+        <h1>FK/IK with Elbow-Axis Offset \(dX\)</h1>
+        <p class="muted">
+          4‑DOF arm: base yaw \(q_0\) about \(+Z\), then shoulder/elbow/wrist pitch about parallel \(+Y\) axes.
+          This page describes how the kinematics change if the <b>elbow pitch axis is offset</b> by a small distance \(dX\)
+          in the arm plane along \(+X\) (when the shoulder link is upright, \(q_1=0\)).
+        </p>
+      </header>
+
+      <div class="card">
+        <h2>1) What does “elbow axis offset by \(dX\)” mean?</h2>
+        <p class="muted">
+          In the ideal model, the shoulder→elbow segment is a single link of length \(L_1\) along the local \(+Z\) direction at \(q_1=0\).
+          With an offset, the elbow pitch axis is not exactly at the end of that link; instead its position relative to the shoulder axis
+          (in the shoulder’s local frame at \(q_1=0\)) is:
+        </p>
+        <p>
+          \[
+            \text{shoulder→elbow offset at }q_1=0:\quad
+            \begin{bmatrix}
+              dX \\
+              L_1
+            \end{bmatrix}
+            \quad \text{in the }(r,z)\text{ plane}
+          \]
+        </p>
+        <p class="muted">
+          Here \(r\) is the horizontal radial axis (in the yaw-reduced plane) and \(z\) is vertical.
+          The elbow axis is still parallel to the shoulder axis (both are pitch axes along \(+Y\)), but its <b>location</b> has an extra in-plane translation.
+        </p>
+        <div class="note">
+          This is a common “bracket/servo horn” effect. It is small but it changes IK: the arm is no longer a pure 2‑link triangle after removing \(L_3\).
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2) FK with elbow offset \(dX\)</h2>
+        <p class="muted">
+          As usual, reduce 3D to the yaw plane:
+        </p>
+        <p>
+          \[
+            r=\sqrt{x^2+y^2},\qquad q_0=\operatorname{atan2}(y,x)
+          \]
+        </p>
+        <p class="muted">
+          Define the shoulder→elbow contribution in the \((r,z)\) plane after rotating by \(q_1\) about \(+Y\).
+          With the local offset \((dX, L_1)\) at \(q_1=0\), the rotated components are:
+        </p>
+        <p>
+          \[
+            r_{SE} = dX\cos(q_1) + L_1\sin(q_1)
+          \]
+        </p>
+        <p>
+          \[
+            z_{SE} = -dX\sin(q_1) + L_1\cos(q_1)
+          \]
+        </p>
+        <p class="muted">
+          Add the remaining links (same as the ideal planar model):
+        </p>
+        <p>
+          \[
+            r =
+            r_{SE} +
+            L_2\sin(q_1+q_2) +
+            L_3\sin(q_1+q_2+q_3)
+          \]
+        </p>
+        <p>
+          \[
+            z =
+            H + z_{SE} +
+            L_2\cos(q_1+q_2) +
+            L_3\cos(q_1+q_2+q_3)
+          \]
+        </p>
+        <p class="muted">
+          And convert back to \(x,y\):
+        </p>
+        <p>
+          \[
+            x=r\cos(q_0),\qquad y=r\sin(q_0)
+          \]
+        </p>
+
+        <h3>FK with constrained tool pitch \(\gamma=\pi\)</h3>
+        <p class="muted">
+          If you enforce \(\gamma=q_1+q_2+q_3=\pi\), then \(\sin(\gamma)=0\), \(\cos(\gamma)=-1\), giving:
+        </p>
+        <p>
+          \[
+            r = dX\cos(q_1) + L_1\sin(q_1) + L_2\sin(q_1+q_2)
+          \]
+        </p>
+        <p>
+          \[
+            z = H - L_3 - dX\sin(q_1) + L_1\cos(q_1) + L_2\cos(q_1+q_2)
+          \]
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>3) IK implications</h2>
+        <p class="muted">
+          In the ideal model (no \(dX\)), after removing \(L_3\) you get a clean 2‑link triangle and can use the law of cosines.
+          With \(dX\neq 0\), the shoulder contribution contains both \(\sin(q_1)\) and \(\cos(q_1)\) terms (because of the offset),
+          so the simple law-of-cosines reduction no longer applies directly.
+        </p>
+        <div class="warnbox">
+          Practically: <b>FK is still closed-form</b>, but <b>IK is best solved numerically</b> (fast and robust for small offsets).
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>4) Recommended IK: numerical solve in the yaw-reduced plane</h2>
+        <p class="muted">
+          Choose a desired tool pitch \(\gamma\) (often constant for “downward” approach). After computing \(q_0\) and \(r\),
+          compute the wrist point (end of \(L_2\)) by removing \(L_3\):
+        </p>
+        <p>
+          \[
+            r_w = r - L_3\sin(\gamma),\qquad z_w = (z-H) - L_3\cos(\gamma)
+          \]
+        </p>
+        <p class="muted">
+          With elbow offset \(dX\), the wrist-point FK equations (unknowns \(q_1,q_2\)) are:
+        </p>
+        <p>
+          \[
+            f_r(q_1,q_2) = dX\cos(q_1) + L_1\sin(q_1) + L_2\sin(q_1+q_2) - r_w
+          \]
+        </p>
+        <p>
+          \[
+            f_z(q_1,q_2) = -dX\sin(q_1) + L_1\cos(q_1) + L_2\cos(q_1+q_2) - z_w
+          \]
+        </p>
+        <p class="muted">
+          Solve the 2×2 root-finding problem \(f_r=0,\ f_z=0\) using Newton or Levenberg–Marquardt.
+          Once \(q_1,q_2\) are found, compute:
+        </p>
+        <p>
+          \[
+            q_3 = \gamma - q_1 - q_2
+          \]
+        </p>
+
+        <h3>Good initial guess</h3>
+        <p class="muted">
+          Use the closed-form IK that assumes \(dX=0\) as the initial guess \((q_1^{(0)},q_2^{(0)})\).
+          For small \(dX\), Newton/LM typically converges in a few iterations.
+        </p>
+
+        <h3>Newton iteration (pseudocode)</h3>
+        <pre><code># Unknowns: q1, q2 (radians)
+# Goal: solve f(q1,q2) = [fr, fz] = [0,0]
+
+for iter = 1..K:
+  fr = dX*cos(q1) + L1*sin(q1) + L2*sin(q1+q2) - rw
+  fz = -dX*sin(q1) + L1*cos(q1) + L2*cos(q1+q2) - zw
+
+  # Jacobian J = df/d[q1,q2]
+  dfr_dq1 = -dX*sin(q1) + L1*cos(q1) + L2*cos(q1+q2)
+  dfr_dq2 =  L2*cos(q1+q2)
+  dfz_dq1 = -dX*cos(q1) - L1*sin(q1) - L2*sin(q1+q2)
+  dfz_dq2 = -L2*sin(q1+q2)
+
+  Solve J * [dq1, dq2]^T = -[fr, fz]^T
+  q1 += dq1
+  q2 += dq2
+
+Stop when sqrt(fr^2 + fz^2) is small.</code></pre>
+        <div class="note">
+          If Newton is too sensitive near singularities, use Levenberg–Marquardt:
+          solve \((J^T J + \lambda I)\Delta = -J^T f\) and adapt \(\lambda\).
+        </div>
+      </div>
+
+      <footer>
+        File: <code>docs/IK/fk-ik-elbow-offset.html</code>
+      </footer>
+    </div>
+  </body>
+</html>

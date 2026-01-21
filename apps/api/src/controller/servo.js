@@ -16,7 +16,7 @@ router.post(
   }),
   async (req, res) => {
     const { slow } = res.locals.parsed.query
-    await servo.home(slow)
+    await servo.toHome(slow)
     res.sendStatus(200)
   }
 )
@@ -53,16 +53,14 @@ router.post(
   '/to',
   validator({
     body: z.object({
-      to: z.record(
-        z.enum(Object.keys(config.servos)),
-        z.number()
-      ),
-      numPoints: z.number().int().default(100)
-    })
+      base: z.number(),
+      shoulder: z.number(),
+      elbow: z.number(),
+      wrist: z.number(),
+    }),
   }),
   async (req, res) => {
-    const { to, numPoints } = res.locals.parsed.body
-    await servo.to(to, numPoints)
+    await servo.toPoint(res.locals.parsed.body)
     res.sendStatus(200)
   }
 )
