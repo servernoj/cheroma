@@ -195,9 +195,12 @@ const relax = async (servos = null) => {
     )
   )
 }
-
-const toHome = async (slow = true) => {
-  if (slow) {
+/**
+ * 
+ * @param {{slow?: boolean, relax?: boolean}} [options] 
+ */
+const toHome = async (options = { slow: true, relax: true }) => {
+  if (options.slow) {
     await toPoint(getHomePosition())
   } else {
     await throttler({
@@ -213,7 +216,9 @@ const toHome = async (slow = true) => {
       },
       bulkSize: 1
     })
-    await relax()
+    if (options.relax) {
+      await relax()
+    }
   }
 }
 
@@ -264,8 +269,9 @@ const pathPlanner = (from, to) => {
 
 /**
  * @param {ServoPosition} toPosition final position (angles in deg) to move servos
+ * @param {{relax?: boolean}} [options] options
  */
-const toPoint = async (toPosition) => {
+const toPoint = async (toPosition, options = { relax: true }) => {
   const points = pathPlanner(currentPosition, toPosition)
   await throttler({
     array: points,
@@ -285,7 +291,9 @@ const toPoint = async (toPosition) => {
       currentPosition = point
     }
   })
-  await relax()
+  if (options?.relax) {
+    await relax()
+  }
 }
 
 
