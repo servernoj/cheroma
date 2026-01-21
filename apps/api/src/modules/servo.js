@@ -1,5 +1,4 @@
 import { sleep, throttler, writeRegister } from './utils.js'
-import { FK, IK } from './kinematics.js'
 import config from '@/config.json' with {type: 'json'}
 
 const REGS = {
