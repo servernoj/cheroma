@@ -16,7 +16,7 @@ router.post(
   }),
   async (req, res) => {
     const { slow } = res.locals.parsed.query
-    await servo.toHome(slow)
+    await servo.toHome({ slow, relax: true })
     res.sendStatus(200)
   }
 )
@@ -44,7 +44,7 @@ router.post(
     })
   }),
   async (req, res) => {
-    const { channel, us: pulseWidthUs } = res.locals.parsed.body
+    const { channel, pulseWidthUs } = res.locals.parsed.body
     await servo.setChannel({ channel, pulseWidthUs })
     res.sendStatus(200)
   }

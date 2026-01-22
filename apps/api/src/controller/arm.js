@@ -42,8 +42,8 @@ router.post(
   async (req, res) => {
     const { x, y, z } = res.locals.parsed.body
     await servo.toHome({ slow: true, relax: false })
-    await sleep(100)
-    const above = IK({ x, y, z: z - 50 })
+    await sleep(700)
+    const above = IK({ x, y, z: z + 50 })
     await servo.toPoint({
       base: above.q0,
       shoulder: above.q1,
@@ -51,7 +51,7 @@ router.post(
       wrist: above.q3
     }, { relax: false })
     const target = IK({ x, y, z })
-    await sleep(100)
+    await sleep(700)
     await servo.toPoint({
       base: target.q0,
       shoulder: target.q1,

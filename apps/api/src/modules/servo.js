@@ -11,7 +11,7 @@ const REGS = {
 // PWM frequency
 const freq = 50
 // Determines number of intermediate points for `pathPlanner` function
-const degPerPathSegment = 10
+const degPerPathSegment = 2
 // Servo names as array
 /** @type {Array<ServoName>} */
 // @ts-ignore
@@ -45,7 +45,7 @@ const interp = (angle, begin, end) => {
   const [a1, u1] = end
   if (a1 === a0) throw new Error('Duplicate angleDeg in sortedPoints')
   const t = (angle - a0) / (a1 - a0)
-  return u0 + t * (u1 - u0)
+  return Math.round(u0 + t * (u1 - u0))
 }
 
 /**
@@ -104,9 +104,7 @@ const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
    * }} args
    * @returns {number} pulseWidthUs
    */
-  const handler = ({ angleDeg, servoName }) => angleDeg === null
-    ? 0
-    : angleDegToPulseUsRaw(angleDeg, closure[servoName], { clamp })
+  const handler = ({ angleDeg, servoName }) => angleDegToPulseUsRaw(angleDeg, closure[servoName], { clamp })
   return handler
 }
 
@@ -201,7 +199,7 @@ const relax = async (servos = null) => {
  */
 const toHome = async (options = { slow: true, relax: true }) => {
   if (options.slow) {
-    await toPoint(getHomePosition())
+    await toPoint(getHomePosition(), options)
   } else {
     await throttler({
       array: servoNames,
@@ -287,7 +285,7 @@ const toPoint = async (toPosition, options = { relax: true }) => {
         }
       )
       await setChannels(setChannelsData)
-      await sleep(10)
+      await sleep(20)
       currentPosition = point
     }
   })
