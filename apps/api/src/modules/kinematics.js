@@ -20,8 +20,6 @@ const k2s = Object.entries(config.servos).reduce(
   {}
 )
 
-console.log(k2s)
-
 /**
  * @param {KinematicsInput} K 
  * @returns {ServoPosition}

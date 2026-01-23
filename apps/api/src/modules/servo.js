@@ -11,7 +11,7 @@ const REGS = {
 // PWM frequency
 const freq = 50
 // Determines number of intermediate points for `pathPlanner` function
-const degPerPathSegment = 10
+const degPerPathSegment = 2
 // Servo names as array
 /** @type {Array<ServoName>} */
 // @ts-ignore
@@ -284,6 +284,7 @@ const toPoint = async (toPosition, via = [], options = { relax: true }) => {
       points: []
     }
   )
+  console.log(points)
   await throttler({
     array: points,
     bulkSize: 1,
