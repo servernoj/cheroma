@@ -11,7 +11,7 @@ const REGS = {
 // PWM frequency
 const freq = 50
 // Determines number of intermediate points for `pathPlanner` function
-const degPerPathSegment = 2
+const degPerPathSegment = 10
 // Servo names as array
 /** @type {Array<ServoName>} */
 // @ts-ignore
@@ -199,7 +199,7 @@ const relax = async (servos = null) => {
  */
 const toHome = async (options = { slow: true, relax: true }) => {
   if (options.slow) {
-    await toPoint(getHomePosition(), options)
+    await toPoint(getHomePosition(), [], options)
   } else {
     await throttler({
       array: servoNames,
@@ -223,8 +223,9 @@ const toHome = async (options = { slow: true, relax: true }) => {
 /**
  * @param {ServoPosition} from a point to start from
  * @param {ServoPosition} to a point to land at
+ * @param {boolean} includeTo a flag controlling actual inclusion of the `to` point
  */
-const pathPlanner = (from, to) => {
+const pathPlanner = (from, to, includeTo = true) => {
   // -- determine the longest path
   const longestPathDeg = servoNames.reduce(
     (acc, servoName) => {
@@ -236,7 +237,9 @@ const pathPlanner = (from, to) => {
     },
     0
   )
-  const numPoints = Math.ceil(longestPathDeg / degPerPathSegment) + 1
+  const extraPoints = longestPathDeg % degPerPathSegment === 0 ? 0 : 1
+  const numPoints = Math.floor(longestPathDeg / degPerPathSegment) + 1 + extraPoints
+
   const deltas = servoNames.reduce(
     (acc, servoName) => {
       acc[servoName] = (to[servoName] - from[servoName]) / (numPoints - 1)
@@ -253,24 +256,34 @@ const pathPlanner = (from, to) => {
       return servoNames.reduce(
         /** @param {*} acc */
         (acc, servoName) => {
-          acc[servoName] = from[servoName] === null || to[servoName] === null
-            ? null
-            : from[servoName] + idx * deltas[servoName]
+          acc[servoName] = from[servoName] + idx * deltas[servoName]
           return acc
         },
         {}
       )
     }
   )
-  return points
+  return includeTo ? points : points.slice(0, -1)
 }
 
 /**
  * @param {ServoPosition} toPosition final position (angles in deg) to move servos
+ * @param {Array<ServoPosition>} [via] list of intermediate points to be explicitly included
  * @param {{relax?: boolean}} [options] options
  */
-const toPoint = async (toPosition, options = { relax: true }) => {
-  const points = pathPlanner(currentPosition, toPosition)
+const toPoint = async (toPosition, via = [], options = { relax: true }) => {
+  const { points } = [...via, toPosition].reduce(
+    (acc, next, idx, arr) => {
+      const segmentPoints = pathPlanner(acc.last, next, idx === arr.length - 1)
+      acc.points.push(...segmentPoints)
+      acc.last = next
+      return acc
+    },
+    {
+      last: currentPosition,
+      points: []
+    }
+  )
   await throttler({
     array: points,
     bulkSize: 1,
@@ -293,7 +306,6 @@ const toPoint = async (toPosition, options = { relax: true }) => {
     await relax()
   }
 }
-
 
 export {
   setChannel,

@@ -3,8 +3,7 @@ import morgan from 'morgan'
 import { queryTypes, fallback, errorHandler } from '@/controller/mw/index.js'
 import servo from '@/controller/servo.js'
 import arm from '@/controller/arm.js'
-import { init as driverInit, toHome, relax } from '@/modules/servo.js'
-import { sleep } from './modules/utils.js'
+import { init as driverInit, toHome } from '@/modules/servo.js'
 
 const app = express()
 app.use(morgan('dev'))

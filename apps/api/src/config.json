@@ -8,7 +8,8 @@
         [0.0, 1550],
         [90.0, 2230]
       ],
-      "home": 0
+      "home": 0,
+      "kinematics": "q0"
     },
     "shoulder": {
       "channel": 1,
@@ -17,7 +18,8 @@
         [0.0, 1550],
         [90.0, 880]
       ],
-      "home": 0
+      "home": 0,
+      "kinematics": "q1"
     },
     "elbow": {
       "channel": 2,
@@ -26,7 +28,8 @@
         [90.0, 1470],
         [180.0, 2390]
       ],
-      "home": 150
+      "home": 150,
+      "kinematics": "q2"
     },
     "wrist": {
       "channel": 3,
@@ -35,7 +38,8 @@
         [0.0, 1595],
         [90.0, 2550]
       ],
-      "home": 30
+      "home": 30,
+      "kinematics": "q3"
     }
   },
   "segments": {

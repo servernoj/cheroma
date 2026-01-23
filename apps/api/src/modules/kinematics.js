@@ -12,6 +12,26 @@ const L = Object.entries(config.segments).reduce(
   {}
 )
 
+const k2s = Object.entries(config.servos).reduce(
+  (acc, [servoName, { kinematics }]) => {
+    acc[kinematics] = servoName
+    return acc
+  },
+  {}
+)
+
+console.log(k2s)
+
+/**
+ * @param {KinematicsInput} K 
+ * @returns {ServoPosition}
+ */
+const K2S = K => Object.entries(K).reduce(
+  /** @param {*} acc */
+  (acc, [k, v]) => ({ ...acc, [k2s[k]]: v }),
+  {}
+)
+
 const r2d = r => r * 180 / Math.PI
 const d2r = d => d * Math.PI / 180
 
@@ -96,4 +116,4 @@ const IK = ({ x, y, z }) => {
   }
 }
 
-export { FK, IK }
+export { FK, IK, K2S }
