@@ -51,14 +51,17 @@ const interp = (angle, begin, end) => {
 /**
  * 
  * @param {number} angleDeg angle to convert to pulse width
- * @param {Array<ServoCalPoint>} sortedPoints Sorted array of calibration points (@see {@link ServoCalPoint})
- * @param {{clamp?: boolean}} options Options
- * @returns 
+ * @param {{
+ *   sortedPoints: Array<ServoCalPoint>
+ *   correction: ServoCorrection
+ *   clamp?: boolean
+ * }} options
  */
-const angleDegToPulseUsRaw = (angleDeg, sortedPoints, { clamp = true } = {}) => {
+const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, correction, clamp = true }) => {
   if (!Array.isArray(sortedPoints) || sortedPoints.length < 2) {
     throw new Error('sortedPoints must have at least 2 [angleDeg, pulseUs] points')
   }
+  angleDeg = (angleDeg - correction.offset) / correction.gain
   const n = sortedPoints.length
   // Handle left/right of table
   if (angleDeg <= sortedPoints[0][0]) {
@@ -84,15 +87,21 @@ const angleDegToPulseUsRaw = (angleDeg, sortedPoints, { clamp = true } = {}) => 
     else hi = mid
   }
   return interp(angleDeg, sortedPoints[lo], sortedPoints[lo + 1])
+
+
 }
 
 const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
   const closure = Object.entries(config.servos).reduce(
-    (acc, [servoName, { calPoints }]) => {
+    (acc, [servoName, { calPoints, correction }]) => {
       const sortedPoints = calPoints.slice().sort(
         (a, b) => a[0] - b[0]
       )
-      acc[servoName] = sortedPoints
+      if (!acc[servoName]) {
+        acc[servoName] = {}
+      }
+      acc[servoName].sortedPoints = sortedPoints
+      acc[servoName].correction = correction
       return acc
     },
     {}
@@ -104,7 +113,7 @@ const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
    * }} args
    * @returns {number} pulseWidthUs
    */
-  const handler = ({ angleDeg, servoName }) => angleDegToPulseUsRaw(angleDeg, closure[servoName], { clamp })
+  const handler = ({ angleDeg, servoName }) => angleDegToPulseUsRaw(angleDeg, { ...closure[servoName], clamp })
   return handler
 }
 
@@ -284,7 +293,6 @@ const toPoint = async (toPosition, via = [], options = { relax: true }) => {
       points: []
     }
   )
-  console.log(points)
   await throttler({
     array: points,
     bulkSize: 1,

@@ -17,6 +17,10 @@ declare global {
     z: number
   }
   // --
+  type ServoCorrection = {
+    gain: number
+    offset: number
+  }
   type ServoCalPoint = [number, number]
   type ServoName = keyof typeof config['servos']
   type ServoData = {

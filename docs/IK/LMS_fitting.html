@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LMS/LM Fitting for Arm Calibration (from Qcmd and Xmeas)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #7aa2ff;
+        --accent2: #9ef0c3;
+        --warn: #ffd27a;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 40px 18px 60px; }
+      header { margin-bottom: 18px; }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      .subtitle { color: var(--muted); margin: 0; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      h2 { font-size: 18px; margin: 4px 0 10px; color: #f2f6ff; }
+      h3 { font-size: 16px; margin: 16px 0 8px; color: #f2f6ff; }
+      ul, ol { margin: 8px 0 0 18px; }
+      li { margin: 6px 0; }
+      .muted { color: var(--muted); }
+      .small { font-size: 13px; }
+      .note {
+        border-left: 3px solid var(--accent2);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .warnbox {
+        border-left: 3px solid var(--warn);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      code, pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      pre {
+        background: rgba(14, 22, 48, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 12px;
+        overflow: auto;
+      }
+      footer { margin-top: 22px; color: var(--muted); font-size: 13px; }
+    </style>
+
+    <!-- MathJax for readable equations -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="card">
+        <h1>LMS/LM fitting: calibrate from \(\{Q^{cmd}_i, X^{meas}_i\}\)</h1>
+        <p class="subtitle">
+          Step-by-step: how to fit correction parameters with least squares / Levenberg–Marquardt (LM),
+          using your 20–50 experiments where you logged the commanded joint angles \(Q^{cmd}\) and measured TCP positions \(X^{meas}\).
+        </p>
+      </header>
+
+      <div class="card">
+        <h2>0) Units and notation (match your code)</h2>
+        <ul class="muted">
+          <li>Angles in <b>degrees</b> in logs/config. Convert to radians inside \(\sin,\cos\) for FK.</li>
+          <li>Positions in <b>millimeters</b>.</li>
+          <li>Sample \(i\) contains:
+            \[
+              Q^{cmd}_i = [q_{0},q_{1},q_{2},q_{3}]_i \in \mathbb{R}^4,\qquad
+              X^{meas}_i = [x,y,z]_i \in \mathbb{R}^3
+            \]
+          </li>
+        </ul>
+        <div class="note small">
+          You can compute an “\(X^{pred}\)” from \(Q^{cmd}\) using your current FK, but in calibration \(X^{pred}\) depends on the
+          unknown parameters you are fitting. So treat \(X^{pred}_i(P)\) as a function of the parameter vector \(P\), not a fixed value.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>1) Choose what to fit (start simple)</h2>
+
+        <h3>Stage A (recommended first): fit per-joint angle offsets only</h3>
+        <p class="muted">
+          Fit only 4 parameters \(b_j\) (degrees):
+        </p>
+        <p>
+          \[
+            b = [b_0,b_1,b_2,b_3]^T
+          \]
+        </p>
+        <p class="muted">
+          Model:
+        </p>
+        <p>
+          \[
+            q^{phys}_{i,j} = q^{cmd}_{i,j} + b_j
+          \]
+        </p>
+
+        <h3>Stage B (optional): fit scale + offset per joint</h3>
+        <p class="muted">
+          If you still see systematic “too short/too long” behavior across the whole range, unlock per-joint scales \(a_j\):
+        </p>
+        <p>
+          \[
+            a = [a_0,a_1,a_2,a_3]^T,\qquad
+            b = [b_0,b_1,b_2,b_3]^T
+          \]
+        </p>
+        <p>
+          \[
+            q^{phys}_{i,j} = a_j\,q^{cmd}_{i,j} + b_j
+          \]
+        </p>
+        <div class="warnbox small">
+          Don’t fit \(a\) and link lengths at the same time initially.
+          They can “trade off” and make the optimization ill-conditioned unless you add strong priors.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2) Define the prediction model \(X^{pred}_i(P)\)</h2>
+        <p class="muted">
+          For a candidate parameter vector \(P\) (either \(b\) only, or \((a,b)\)), compute:
+        </p>
+        <p>
+          \[
+            Q^{phys}_i(P) = [q^{phys}_{i,0}, q^{phys}_{i,1}, q^{phys}_{i,2}, q^{phys}_{i,3}]
+          \]
+        </p>
+        <p class="muted">
+          Then predict TCP position with forward kinematics:
+        </p>
+        <p>
+          \[
+            X^{pred}_i(P) = FK\!\left(Q^{phys}_i(P);\;H,L_1,L_2,L_3,dX\right)
+          \]
+        </p>
+        <div class="note small">
+          Use the exact FK you currently run in JS (including \(dX\) if enabled). Calibration will only be as good as the model you fit.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3) Residuals and objective (least squares)</h2>
+        <p class="muted">
+          Residual for sample \(i\):
+        </p>
+        <p>
+          \[
+            r_i(P) = X^{pred}_i(P) - X^{meas}_i \in \mathbb{R}^3
+          \]
+        </p>
+        <p class="muted">
+          Stack all residuals into one vector \(r(P)\in\mathbb{R}^{3N}\) and minimize the sum of squares:
+        </p>
+        <p>
+          \[
+            P^\* = \arg\min_P \sum_{i=1}^{N}\lVert r_i(P)\rVert^2
+          \]
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>4) LM/LMS update rule (what “LMS fitting” does)</h2>
+        <p class="muted">
+          Let \(J(P) = \frac{\partial r}{\partial P}\) be the Jacobian of the stacked residual vector.
+          LM solves for an update \(\Delta P\) via:
+        </p>
+        <p>
+          \[
+            (J^T J + \lambda I)\,\Delta P = -J^T r
+          \]
+        </p>
+        <p class="muted">
+          Then:
+        </p>
+        <p>
+          \[
+            P \leftarrow P + \Delta P
+          \]
+        </p>
+        <p class="muted">
+          Adapt \(\lambda\): if the error decreases, reduce \(\lambda\); otherwise increase \(\lambda\) and retry.
+        </p>
+        <div class="note small">
+          You usually do <b>numerical</b> Jacobians first (finite differences). Analytical Jacobians are faster but optional.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>5) MATLAB implementation (recommended: <code>lsqnonlin</code>)</h2>
+        <p class="muted">
+          If you have Optimization Toolbox, <code>lsqnonlin</code> runs LM/TR solvers for you.
+          You provide only a residual function that returns the stacked \(3N\) vector.
+        </p>
+
+        <h3>Data layout</h3>
+        <pre><code>% Qcmd: N×4 (deg)
+% Xmeas: N×3 (mm)
+% geom: struct with H,L1,L2,L3,dX (mm)</code></pre>
+
+        <h3>Stage A residual (fit b only)</h3>
+        <pre><code>function r = residual_b_only(b, Qcmd, Xmeas, geom)
+% b: 4×1 (deg)
+N = size(Qcmd,1);
+r = zeros(3*N,1);
+for i = 1:N
+  Qphys = Qcmd(i,:)' + b;              % 4×1 (deg)
+  Xpred = FK_deg(Qphys, geom);         % 3×1 (mm), FK converts deg→rad internally
+  ri = Xpred - Xmeas(i,:)';            % 3×1
+  r(3*(i-1)+1:3*i) = ri;
+end
+end</code></pre>
+
+        <h3>Stage B residual (fit a and b)</h3>
+        <pre><code>function r = residual_a_b(P, Qcmd, Xmeas, geom)
+% P: 8×1 where a=P(1:4), b=P(5:8)
+a = P(1:4);
+b = P(5:8);
+N = size(Qcmd,1);
+r = zeros(3*N,1);
+for i = 1:N
+  Qphys = a .* Qcmd(i,:)' + b;         % 4×1 (deg)
+  Xpred = FK_deg(Qphys, geom);         % 3×1 (mm)
+  ri = Xpred - Xmeas(i,:)';
+  r(3*(i-1)+1:3*i) = ri;
+end
+end</code></pre>
+
+        <h3>Calling <code>lsqnonlin</code></h3>
+        <pre><code>% Stage A: fit offsets only
+b0 = zeros(4,1);
+opts = optimoptions('lsqnonlin', 'Display','iter', 'MaxFunctionEvaluations', 1e5);
+b_star = lsqnonlin(@(b)residual_b_only(b, Qcmd, Xmeas, geom), b0, [], [], opts);
+
+% Stage B: unlock scales too (optional)
+P0 = [ones(4,1); b_star];
+lb = [0.9*ones(4,1); -20*ones(4,1)];   % example bounds
+ub = [1.1*ones(4,1);  20*ones(4,1)];
+P_star = lsqnonlin(@(P)residual_a_b(P, Qcmd, Xmeas, geom), P0, lb, ub, opts);
+a_star = P_star(1:4);
+b_star = P_star(5:8);</code></pre>
+
+        <div class="warnbox small">
+          If you don’t have Optimization Toolbox, you can still implement LM using the equation
+          \((J^T J + \lambda I)\Delta=-J^T r\) with a numerical Jacobian.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>6) What to do with the fitted parameters</h2>
+        <p class="muted">
+          After you obtain \((a^\*, b^\*)\), apply them in the <b>control path</b> (IK → pulses):
+        </p>
+        <p>
+          \[
+            q^{tbl}=\frac{q^{cmd}-b^\*}{a^\*}
+          \]
+        </p>
+        <p class="muted">
+          Then compute pulses from <code>calPoints</code> using \(q^{tbl}\).
+        </p>
+        <div class="note small">
+          If you fitted offsets only, use \(a^\*=1\) and \(q^{tbl}=q^{cmd}-b^\*\).
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>7) Sanity checks</h2>
+        <ul class="muted">
+          <li><b>Hold-out validation</b>: fit on ~80% points, report RMS on remaining ~20%.</li>
+          <li><b>RMS error</b>:
+            \[
+              \mathrm{RMS}=\sqrt{\frac{1}{N}\sum_{i=1}^{N}\|r_i(P^\*)\|^2}
+            \]
+          </li>
+          <li><b>Branch consistency</b>: if you enforce elbow-up only, make sure all samples used the same branch logic.</li>
+          <li><b>Data diversity</b>: vary base yaw, shoulder/elbow/wrist, and height; avoid all points lying on one plane.</li>
+        </ul>
+      </div>
+
+      <footer>
+        File: <code>docs/IK/LMS_fitting.html</code>
+      </footer>
+    </div>
+  </body>
+</html>

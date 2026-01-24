@@ -26,6 +26,7 @@ router.post(
   async (req, res) => {
     const { to, via = [] } = res.locals.parsed.body
     const target = IK(to)
+    console.log(Object.values(target).map(p => Math.round(p * 100) / 100))
     const preTarget = IK({
       ...to,
       z: to.z + 100
