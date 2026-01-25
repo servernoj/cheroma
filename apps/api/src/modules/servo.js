@@ -1,5 +1,6 @@
 import { sleep, throttler, writeRegister } from './utils.js'
 import config from '@/config.json' with {type: 'json'}
+import { performance } from 'node:perf_hooks'
 
 const REGS = {
   MODE1: 0x00,
@@ -10,8 +11,6 @@ const REGS = {
 
 // PWM frequency
 const freq = 50
-// Determines number of intermediate points for `pathPlanner` function
-const degPerPathSegment = 2
 // Servo names as array
 /** @type {Array<ServoName>} */
 // @ts-ignore
@@ -34,7 +33,6 @@ const getHomePosition = () => Object.entries(config.servos).reduce(
 let currentPosition = getHomePosition()
 
 /**
- * 
  * @param {number} angle Angle to interpolate pulseWidth for
  * @param {ServoCalPoint} begin Begin of the interpolation segment
  * @param {ServoCalPoint} end End of the interpolation segment
@@ -45,11 +43,12 @@ const interp = (angle, begin, end) => {
   const [a1, u1] = end
   if (a1 === a0) throw new Error('Duplicate angleDeg in sortedPoints')
   const t = (angle - a0) / (a1 - a0)
-  return Math.round(u0 + t * (u1 - u0))
+  // IMPORTANT: keep as float microseconds here.
+  // Rounding too early causes "stair-step" motion when angle increments are small.
+  return u0 + t * (u1 - u0)
 }
 
 /**
- * 
  * @param {number} angleDeg angle to convert to pulse width
  * @param {{
  *   sortedPoints: Array<ServoCalPoint>
@@ -203,7 +202,6 @@ const relax = async (servos = null) => {
   )
 }
 /**
- * 
  * @param {{slow?: boolean, relax?: boolean}} [options] 
  */
 const toHome = async (options = { slow: true, relax: true }) => {
@@ -234,56 +232,117 @@ const toHome = async (options = { slow: true, relax: true }) => {
  * @param {ServoPosition} to a point to land at
  * @param {boolean} includeTo a flag controlling actual inclusion of the `to` point
  */
-const pathPlanner = (from, to, includeTo = true) => {
-  // -- determine the longest path
-  const longestPathDeg = servoNames.reduce(
+/**
+ * Quintic ease-in-out: zero velocity + zero accel at endpoints.
+ * @param {number} t in [0,1]
+ */
+const easeQuintic = (t) => {
+  // 10t^3 - 15t^4 + 6t^5
+  const t2 = t * t
+  const t3 = t2 * t
+  const t4 = t3 * t
+  const t5 = t4 * t
+  return 10 * t3 - 15 * t4 + 6 * t5
+}
+
+/**
+ * Smooth path planner: chooses number of points from max speed, then eases.
+ *
+ * - Uses a fixed update cadence (dtMs) and computes steps so that the maximum joint
+ *   motion does not exceed vMaxDegPerSec.
+ * - Interpolates in joint space with a smooth easing curve (quintic) to reduce jerk.
+ *
+ * @param {ServoPosition} from a point to start from (deg)
+ * @param {ServoPosition} to a point to land at (deg)
+ * @param {boolean} includeTo include the final point explicitly
+ * @param {{
+ *   dtMs?: number,
+ *   vMaxDegPerSec?: number,
+ *   easing?: 'quintic'
+ * }} [options]
+ * @returns {Array<ServoPosition>}
+ */
+const pathPlanner = (from, to, includeTo = true, options) => {
+  const {
+    dtMs = 20,
+    vMaxDegPerSec = 90,
+    easing = 'quintic'
+  } = options ?? {}
+
+  if (dtMs <= 0) throw new Error('dtMs must be > 0')
+  if (vMaxDegPerSec <= 0) throw new Error('vMaxDegPerSec must be > 0')
+  if (easing !== 'quintic') throw new Error(`Unsupported easing: ${easing}`)
+
+  const dtSec = dtMs / 1000
+
+  // Determine maximum joint swing in degrees.
+  const maxDeltaDeg = servoNames.reduce(
     (acc, servoName) => {
-      const candidate = Math.abs(to[servoName] - from[servoName])
-      if (candidate > acc) {
-        acc = candidate
-      }
-      return acc
+      const d = Math.abs(to[servoName] - from[servoName])
+      return d > acc ? d : acc
     },
     0
   )
-  const extraPoints = longestPathDeg % degPerPathSegment === 0 ? 0 : 1
-  const numPoints = Math.floor(longestPathDeg / degPerPathSegment) + 1 + extraPoints
 
-  const deltas = servoNames.reduce(
-    (acc, servoName) => {
-      acc[servoName] = (to[servoName] - from[servoName]) / (numPoints - 1)
-      return acc
-    },
-    {}
-  )
-  /** @type {Array<ServoPosition>} */
-  const points = Array(numPoints).fill().map(
+  // No movement: either return [from] or [] depending on includeTo semantics.
+  if (maxDeltaDeg === 0) {
+    return includeTo ? [from] : []
+  }
+
+  // Choose number of points based on desired max speed.
+  // T ~= maxDelta/vMax. With cadence dt, N ~= T/dt + 1.
+  const T = maxDeltaDeg / vMaxDegPerSec
+  const N = Math.max(2, Math.ceil(T / dtSec) + 1)
+
+  const points = Array(N).fill().map(
     (_, idx) => {
-      if (!idx) {
-        return from
-      }
+      const tau = idx / (N - 1)
+      const s = easeQuintic(tau)
       return servoNames.reduce(
         /** @param {*} acc */
         (acc, servoName) => {
-          acc[servoName] = from[servoName] + idx * deltas[servoName]
+          const start = from[servoName]
+          const delta = to[servoName] - start
+          acc[servoName] = start + s * delta
           return acc
         },
         {}
       )
     }
   )
+
   return includeTo ? points : points.slice(0, -1)
 }
 
 /**
+ * Smooth version of `toPoint`:
+ * - Builds a joint-space path using `pathPlannerSmooth` (variable number of steps).
+ * - Uses quintic easing to reduce jerk and visible "stepping".
+ * - Keeps a fixed update cadence (dtMs), matching typical 50Hz servo behavior.
+ *
  * @param {ServoPosition} toPosition final position (angles in deg) to move servos
  * @param {Array<ServoPosition>} [via] list of intermediate points to be explicitly included
- * @param {{relax?: boolean}} [options] options
+ * @param {{
+ *   relax?: boolean,
+ *   dtMs?: number,
+ *   vMaxDegPerSec?: number,
+ * }} [options]
  */
-const toPoint = async (toPosition, via = [], options = { relax: true }) => {
+const toPoint = async (toPosition, via = [], options) => {
+  const {
+    relax: doRelax = true,
+    dtMs = 20,
+    vMaxDegPerSec = 60,
+  } = options ?? {}
+
   const { points } = [...via, toPosition].reduce(
     (acc, next, idx, arr) => {
-      const segmentPoints = pathPlanner(acc.last, next, idx === arr.length - 1)
+      const segmentPoints = pathPlanner(
+        acc.last,
+        next,
+        idx === arr.length - 1,
+        { dtMs, vMaxDegPerSec, easing: 'quintic' }
+      )
       acc.points.push(...segmentPoints)
       acc.last = next
       return acc
@@ -293,25 +352,36 @@ const toPoint = async (toPosition, via = [], options = { relax: true }) => {
       points: []
     }
   )
-  await throttler({
-    array: points,
-    bulkSize: 1,
-    handler: async (point) => {
-      const setChannelsData = Object.entries(point).map(
-        /** @param {*} arg*/
-        ([servoName, angleDeg]) => {
-          return {
-            channel: config.servos[servoName].channel,
-            pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
-          }
+
+  // Enforce cadence with a "no catch-up bursts" schedule based on performance.now().
+  // We aim for one step per dtMs. If a step runs late, we reset the schedule instead
+  // of trying to fire multiple steps back-to-back (which looks jerky on servos).
+  let nextTick = performance.now() + dtMs
+  for (let k = 0; k < points.length; k += 1) {
+    const point = points[k]
+    const setChannelsData = Object.entries(point).map(
+      /** @param {*} arg*/
+      ([servoName, angleDeg]) => {
+        return {
+          channel: config.servos[servoName].channel,
+          pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
         }
-      )
-      await setChannels(setChannelsData)
-      await sleep(20)
-      currentPosition = point
+      }
+    )
+    await setChannels(setChannelsData)
+    currentPosition = point
+
+    const now = performance.now()
+    const slack = nextTick - now
+    if (slack > 0) {
+      await sleep(slack)
+      nextTick += dtMs
+    } else {
+      // Missed the tick: reset schedule so we don't "catch up" with bursts.
+      nextTick = now + dtMs
     }
-  })
-  if (options?.relax) {
+  }
+  if (doRelax) {
     await relax()
   }
 }

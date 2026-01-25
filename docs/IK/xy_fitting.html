@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XY-only fitting (no Z measurements, no cz)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #7aa2ff;
+        --accent2: #9ef0c3;
+        --warn: #ffd27a;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 40px 18px 60px; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      h2 { font-size: 18px; margin: 14px 0 10px; color: #f2f6ff; }
+      h3 { font-size: 16px; margin: 14px 0 8px; color: #f2f6ff; }
+      p { margin: 8px 0; }
+      ul, ol { margin: 8px 0 0 18px; }
+      li { margin: 6px 0; }
+      .muted { color: var(--muted); }
+      .note {
+        border-left: 3px solid var(--accent2);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .warnbox {
+        border-left: 3px solid var(--warn);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      code, pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      pre {
+        background: rgba(14, 22, 48, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 12px;
+        overflow: auto;
+      }
+      footer { margin-top: 22px; color: var(--muted); font-size: 13px; }
+      a { color: var(--accent); }
+    </style>
+
+    <!-- MathJax for readable equations -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>XY-only fitting (practice run)</h1>
+        <p class="muted">
+          This is the “practice” calibration setup where you <b>do not measure Z at all</b>.
+          You use a laser + printed grid to measure \((x,y)\) precisely, and you fit only the parameters that improve XY.
+          No \(c_z\) and no \(z^{meas}\) are used.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>1) What you log</h2>
+        <ul class="muted">
+          <li>\(Q^{cmd}_i = [q_0,q_1,q_2]_i\) in degrees (the joint angles you commanded for the final pose).</li>
+          <li>\(X^{meas}_{i,xy} = [x,y]_i\) in mm (measured from the printed grid).</li>
+        </ul>
+        <div class="note">
+          You can still execute a 3-step motion (reset → approach \(z+100\) → descend). Just make sure you measure \((x,y)\) only at the final pose.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2) What you fit</h2>
+        <h3>Stage A: offsets only</h3>
+        <p class="muted">Fit:</p>
+        <p>
+          \[
+            b=[b_0,b_1,b_2]^T
+          \]
+        </p>
+        <p class="muted">Model:</p>
+        <p>
+          \[
+            q^{phys}_{i,j} = q^{cmd}_{i,j} + b_j
+          \]
+        </p>
+
+        <h3>Stage B (optional): scales + offsets</h3>
+        <p class="muted">Fit:</p>
+        <p>
+          \[
+            a=[a_0,a_1,a_2]^T,\qquad b=[b_0,b_1,b_2]^T
+          \]
+        </p>
+        <p class="muted">Model:</p>
+        <p>
+          \[
+            q^{phys}_{i,j} = a_j\,q^{cmd}_{i,j} + b_j
+          \]
+        </p>
+        <div class="warnbox small">
+          Keep \(a\) tightly bounded near 1 (e.g. 0.98–1.02). If \(a_0\) tries to drift, it often indicates an XY registration issue.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3) Residuals (XY only)</h2>
+        <p class="muted">
+          For each sample \(i\), compute:
+        </p>
+        <p>
+          \[
+            X^{pred}_i(P)=FK\!\left(Q^{phys}_i(P)\right) = [x^{pred}_i,y^{pred}_i,z^{pred}_i]^T
+          \]
+        </p>
+        <p class="muted">
+          Then define a 2D residual (ignore Z):
+        </p>
+        <p>
+          \[
+            r_i(P)=
+            \begin{bmatrix}
+              x^{pred}_i(P) - x^{meas}_i\\
+              y^{pred}_i(P) - y^{meas}_i
+            \end{bmatrix}
+          \]
+        </p>
+        <p class="muted">
+          Stack all residuals into \(r(P)\in\mathbb{R}^{2N}\) and minimize \(\|r(P)\|^2\) with LM (<code>lsqnonlin</code>).
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>4) Full MATLAB code (XY-only)</h2>
+        <p class="muted">
+          Inputs:
+        </p>
+        <ul class="muted">
+          <li><code>Qcmd</code>: \(N\times 3\) in degrees \([q0,q1,q2]\)</li>
+          <li><code>XYmeas</code>: \(N\times 2\) in mm \([x,y]\)</li>
+        </ul>
+
+        <pre><code>function out = xy_fitting(Qcmd, XYmeas)
+% Qcmd: N×3 (deg) [q0,q1,q2]
+% XYmeas: N×2 (mm) [x,y]
+
+  opts = optimoptions('lsqnonlin', 'Display','iter', 'MaxFunctionEvaluations', 1e5);
+
+  % -------- Stage A: offsets only
+  b0 = zeros(3,1);
+  b_star = lsqnonlin(@(b)residual_xy_b_only(b, Qcmd, XYmeas), b0, [], [], opts);
+  out.stageA.b = b_star;
+
+  % -------- Stage B (optional): scales + offsets
+  doStageB = true;
+  if doStageB
+    P0 = [ones(3,1); b_star];             % P=[a;b]
+    lb = [0.98*ones(3,1); -20*ones(3,1)];
+    ub = [1.02*ones(3,1);  20*ones(3,1)];
+    P_star = lsqnonlin(@(P)residual_xy_a_b(P, Qcmd, XYmeas), P0, lb, ub, opts);
+    out.stageB.a = P_star(1:3);
+    out.stageB.b = P_star(4:6);
+  end
+end
+
+function r = residual_xy_b_only(b, Qcmd, XYmeas)
+% b: 3×1 for [q0,q1,q2] offsets in degrees
+  N = size(Qcmd,1);
+  r = zeros(2*N,1);
+  for i = 1:N
+    Qphys = Qcmd(i,:)' + b;           % 3×1 (deg)
+    Xpred = FK_deg_gamma_pi(Qphys);   % 3×1 (mm)
+    ri = [Xpred(1) - XYmeas(i,1);
+          Xpred(2) - XYmeas(i,2)];
+    r(2*(i-1)+1:2*i) = ri;
+  end
+end
+
+function r = residual_xy_a_b(P, Qcmd, XYmeas)
+% P: 6×1 where a=P(1:3), b=P(4:6)
+  a = P(1:3);
+  b = P(4:6);
+  N = size(Qcmd,1);
+  r = zeros(2*N,1);
+  for i = 1:N
+    Qphys = a .* Qcmd(i,:)' + b;      % 3×1 (deg)
+    Xpred = FK_deg_gamma_pi(Qphys);   % 3×1 (mm)
+    ri = [Xpred(1) - XYmeas(i,1);
+          Xpred(2) - XYmeas(i,2)];
+    r(2*(i-1)+1:2*i) = ri;
+  end
+end
+
+function X = FK_deg_gamma_pi(Q)
+% FK for gamma = pi case, using q0,q1,q2 in degrees.
+% Replace these constants with your current model values.
+  q0 = Q(1); q1 = Q(2); q2 = Q(3);
+
+  H  = 130;
+  L1 = 211;
+  L2 = 265;
+  L3 = 112;
+  dX = 20;
+
+  r = (dX*cosd(q1) + L1*sind(q1)) + L2*sind(q1 + q2);
+  z = H - L3 - dX*sind(q1) + L1*cosd(q1) + L2*cosd(q1 + q2); %#ok<NASGU>
+
+  x = r*cosd(q0);
+  y = r*sind(q0);
+
+  X = [x; y; z];
+end</code></pre>
+
+        <div class="note small">
+          After fitting, apply the resulting corrections in your control pipeline as described in your other docs:
+          in runtime you typically convert \(q^{cmd}\rightarrow q^{tbl}\) before looking up pulses from <code>calPoints</code>.
+        </div>
+      </div>
+
+      <footer>
+        File: <code>docs/IK/xy_fitting.html</code>
+      </footer>
+    </div>
+  </body>
+</html>
