@@ -44,11 +44,7 @@ const FK = ({ q0, q1, q2 }) => {
   const z = H - L3 - dX * Math.sin(d2r(q1)) + L1 * Math.cos(d2r(q1)) + L2 * Math.cos(d2r(q1 + q2))
   const x = r * Math.cos(d2r(q0))
   const y = r * Math.sin(d2r(q0))
-  return {
-    x: Math.round(x),
-    y: Math.round(y),
-    z: Math.round(z)
-  }
+  return { x, y, z }
 }
 
 /**

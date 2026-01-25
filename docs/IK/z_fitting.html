@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Z fitting on a known plane (Option A)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #7aa2ff;
+        --accent2: #9ef0c3;
+        --warn: #ffd27a;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 40px 18px 60px; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      h2 { font-size: 18px; margin: 14px 0 10px; color: #f2f6ff; }
+      h3 { font-size: 16px; margin: 14px 0 8px; color: #f2f6ff; }
+      p { margin: 8px 0; }
+      ul, ol { margin: 8px 0 0 18px; }
+      li { margin: 6px 0; }
+      .muted { color: var(--muted); }
+      .note {
+        border-left: 3px solid var(--accent2);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .warnbox {
+        border-left: 3px solid var(--warn);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      code, pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      pre {
+        background: rgba(14, 22, 48, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 12px;
+        overflow: auto;
+      }
+      footer { margin-top: 22px; color: var(--muted); font-size: 13px; }
+    </style>
+
+    <!-- MathJax for readable equations -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Option A: Fit Z using a known plane (no per-point Z measurement)</h1>
+        <p class="muted">
+          Use this when you can measure \(x,y\) accurately (laser on a printed grid) but \(z\) is hard to measure per point.
+          You will collect all points on a single plane (paper) and fit a single Z correction parameter \(c_z\).
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>1) Experiment design</h2>
+        <ul class="muted">
+          <li>Keep the TCP/laser dot on the <b>paper plane</b> for all measurements.</li>
+          <li>Use the same <b>approach strategy</b> (your 3-step move) so mechanical backlash is consistent.</li>
+          <li>Log \(Q^{cmd}_i=[q_0,q_1,q_2]_i\) (deg) and \(X^{meas}_{i,xy}=[x,y]_i\) (mm) from the grid.</li>
+          <li>Choose a known plane height \(z_{plane}\) for the session and set \(z^{meas}_i = z_{plane}\) for all samples in that session.</li>
+        </ul>
+        <div class="note small">
+          You do not need to know \(z_{plane}\) perfectly. Any constant offset between your “paper plane” and the model’s Z reference
+          is exactly what the fitted \(c_z\) will capture.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2) Model: add one Z bias parameter \(c_z\)</h2>
+        <p class="muted">
+          Let \(FK(\cdot)\) be your current forward kinematics that predicts \(X^{pred}=[x^{pred},y^{pred},z^{pred}]\).
+          Add a single parameter \(c_z\) (mm) that shifts the predicted Z:
+        </p>
+        <p>
+          \[
+            z^{pred} \leftarrow z^{pred} + c_z
+          \]
+        </p>
+        <p class="muted">
+          This is equivalent to fitting a correction to the constant term \((H-L_3)\) in your \(\gamma=\pi\) FK.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>3) What to fit</h2>
+        <h3>Stage A: offsets + Z bias</h3>
+        <p class="muted">
+          Fit:
+        </p>
+        <p>
+          \[
+            P = [b_0,b_1,b_2,c_z]^T
+          \]
+        </p>
+        <p class="muted">
+          with:
+        </p>
+        <p>
+          \[
+            q^{phys}_{i,j} = q^{cmd}_{i,j} + b_j
+          \]
+        </p>
+
+        <h3>Stage B (optional): scales + offsets + Z bias</h3>
+        <p class="muted">
+          If you still see proportional error with angle magnitude, fit:
+        </p>
+        <p>
+          \[
+            P = [a_0,a_1,a_2,b_0,b_1,b_2,c_z]^T
+          \]
+        </p>
+        <p class="muted">
+          with:
+        </p>
+        <p>
+          \[
+            q^{phys}_{i,j} = a_j\,q^{cmd}_{i,j} + b_j
+          \]
+        </p>
+        <div class="warnbox small">
+          Keep \(a_j\) tightly bounded near 1 (e.g. 0.98–1.02). If \(a_0\) wants to drift, it often indicates XY frame/registration issues.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>4) Residuals (what LM minimizes)</h2>
+        <p class="muted">
+          For each sample \(i\), define:
+        </p>
+        <p>
+          \[
+            r_i(P) =
+            \begin{bmatrix}
+              x^{pred}_i(P) - x^{meas}_i \\
+              y^{pred}_i(P) - y^{meas}_i \\
+              (z^{pred}_i(P)+c_z) - z^{meas}_i
+            \end{bmatrix}
+          \]
+        </p>
+        <p class="muted">
+          Stack all residuals into \(r(P)\in\mathbb{R}^{3N}\) and minimize \(\|r(P)\|^2\) with LM (<code>lsqnonlin</code>).
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>5) Full MATLAB code (offsets-only + Z bias, then optional scale+offset)</h2>
+        <p class="muted">
+          This is a complete single-file example. Replace the geometry values with your current measured values.
+          Inputs:
+        </p>
+        <ul class="muted">
+          <li><code>Qcmd</code>: \(N\times 3\) in degrees \([q0,q1,q2]\)</li>
+          <li><code>Xmeas</code>: \(N\times 3\) in mm \([x,y,z]\)</li>
+        </ul>
+        <div class="note small">
+          To combine multiple “runs” at different plane heights, just concatenate rows:
+          <code>Qcmd_all = [Qcmd_run1; Qcmd_run2; Qcmd_run3]</code>,
+          <code>Xmeas_all = [Xmeas_run1; Xmeas_run2; Xmeas_run3]</code>,
+          where each <code>Xmeas_runK(:,3)</code> is filled with that run’s chosen \(z_{plane}\).
+        </div>
+
+        <pre><code>function out = z_fitting(Qcmd, Xmeas)
+% Qcmd: N×3 (deg) [q0,q1,q2]
+% Xmeas: N×3 (mm) [x,y,z]
+%
+% Output:
+% out.stageA: fitted [b0;b1;b2;cz]
+% out.stageB: fitted [a0;a1;a2;b0;b1;b2;cz] (optional)
+
+  opts = optimoptions('lsqnonlin', 'Display','iter', 'MaxFunctionEvaluations', 1e5);
+
+  % -------- Stage A: offsets + cz
+  P0 = zeros(4,1);  % [b0;b1;b2;cz]
+  P_A = lsqnonlin(@(P)residual_b_cz(P, Qcmd, Xmeas), P0, [], [], opts);
+
+  out.stageA.b = P_A(1:3);
+  out.stageA.cz = P_A(4);
+  out.stageA.P = P_A;
+
+  % -------- Stage B (optional): scales + offsets + cz
+  doStageB = true;
+  if doStageB
+    a0 = ones(3,1);
+    P0b = [a0; out.stageA.b; out.stageA.cz];  % [a0;a1;a2;b0;b1;b2;cz]
+
+    lb = [0.98*ones(3,1); -20*ones(3,1); -50];
+    ub = [1.02*ones(3,1);  20*ones(3,1);  50];
+
+    P_B = lsqnonlin(@(P)residual_a_b_cz(P, Qcmd, Xmeas), P0b, lb, ub, opts);
+    out.stageB.a = P_B(1:3);
+    out.stageB.b = P_B(4:6);
+    out.stageB.cz = P_B(7);
+    out.stageB.P = P_B;
+  end
+end
+
+function r = residual_b_cz(P, Qcmd, Xmeas)
+% P = [b0;b1;b2;cz]
+  b = P(1:3);
+  cz = P(4);
+
+  N = size(Qcmd,1);
+  r = zeros(3*N,1);
+  for i = 1:N
+    Qphys = Qcmd(i,:)' + b;         % 3×1 (deg)
+    Xpred = FK_deg_gamma_pi(Qphys); % 3×1 (mm)
+    ri = [Xpred(1) - Xmeas(i,1);
+          Xpred(2) - Xmeas(i,2);
+          (Xpred(3) + cz) - Xmeas(i,3)];
+    r(3*(i-1)+1:3*i) = ri;
+  end
+end
+
+function r = residual_a_b_cz(P, Qcmd, Xmeas)
+% P = [a0;a1;a2;b0;b1;b2;cz]
+  a = P(1:3);
+  b = P(4:6);
+  cz = P(7);
+
+  N = size(Qcmd,1);
+  r = zeros(3*N,1);
+  for i = 1:N
+    Qphys = a .* Qcmd(i,:)' + b;    % 3×1 (deg)
+    Xpred = FK_deg_gamma_pi(Qphys); % 3×1 (mm)
+    ri = [Xpred(1) - Xmeas(i,1);
+          Xpred(2) - Xmeas(i,2);
+          (Xpred(3) + cz) - Xmeas(i,3)];
+    r(3*(i-1)+1:3*i) = ri;
+  end
+end
+
+function X = FK_deg_gamma_pi(Q)
+% FK for gamma = pi case, using q0,q1,q2 in degrees.
+% Replace these constants with your current model values.
+  q0 = Q(1); q1 = Q(2); q2 = Q(3);
+
+  H  = 130;
+  L1 = 211;
+  L2 = 265;
+  L3 = 112;
+  dX = 20;
+
+  r = (dX*cosd(q1) + L1*sind(q1)) + L2*sind(q1 + q2);
+  z = H - L3 - dX*sind(q1) + L1*cosd(q1) + L2*cosd(q1 + q2);
+
+  x = r*cosd(q0);
+  y = r*sind(q0);
+
+  X = [x; y; z];
+end</code></pre>
+        <div class="note small">
+          This formulation already supports multiple plane heights: just populate <code>Xmeas(:,3)</code> per sample with that run’s plane height.
+          If you later suspect the board is tilted, a next step is to fit a plane \(z=ax+by+c\) instead of using fixed \(z^{meas}_i\).
+        </div>
+      </div>
+
+      <footer>
+        File: <code>docs/IK/z_fitting.html</code>
+      </footer>
+    </div>
+  </body>
+</html>
