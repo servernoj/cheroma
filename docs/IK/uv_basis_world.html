@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Compute U,V basis in world frame (general case)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #7aa2ff;
+        --accent2: #9ef0c3;
+        --warn: #ffd27a;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 40px 18px 60px; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      h2 { font-size: 18px; margin: 14px 0 10px; color: #f2f6ff; }
+      p { margin: 8px 0; }
+      ul, ol { margin: 8px 0 0 18px; }
+      li { margin: 6px 0; }
+      .muted { color: var(--muted); }
+      .note {
+        border-left: 3px solid var(--accent2);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .warnbox {
+        border-left: 3px solid var(--warn);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      footer { margin-top: 22px; color: var(--muted); font-size: 13px; }
+    </style>
+
+    <!-- MathJax for readable equations -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Compute \(\hat u,\hat v\) in the world frame (general case)</h1>
+        <p class="muted">
+          Goal: build two unit vectors \(\hat u,\hat v\) spanning the plane perpendicular to the spinner axis \(\hat t\),
+          and express all three (\(\hat u,\hat v,\hat t\)) in the <b>world/base frame</b>.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Step 1 — compute the spinner axis direction \(\hat t\) in world</h2>
+        <p class="muted">
+          The spinner axis is along the tool/wrist centerline. In the general (non-\(\gamma=\pi\)) case, let:
+        </p>
+        <p>
+          \[
+            \gamma = q_1+q_2+q_3
+          \]
+        </p>
+        <h2>Why \(\hat t = [\sin\gamma\cos q_0,\; \sin\gamma\sin q_0,\; \cos\gamma]^T\)</h2>
+        <p class="muted">
+          This comes from building the direction in the arm’s vertical plane and then rotating it around \(Z\) by the base yaw \(q_0\).
+        </p>
+
+        <h2>1a) Direction in the arm plane \((r,z)\)</h2>
+        <p class="muted">
+          In your convention, \(\gamma\) is measured from \(+Z\) toward the horizontal reach direction \(+r\).
+          A unit vector in that plane has components:
+        </p>
+        <p>
+          \[
+            r = \sin\gamma,\qquad z = \cos\gamma
+          \]
+        </p>
+        <p class="muted">
+          (Checks: \(\gamma=0\Rightarrow[r,z]=[0,1]\) up; \(\gamma=90^\circ\Rightarrow[1,0]\) horizontal; \(\gamma=180^\circ\Rightarrow[0,-1]\) down.)
+        </p>
+
+        <h2>1b) Rotate the horizontal part into world \(x,y\) using yaw \(q_0\)</h2>
+        <p class="muted">
+          The planar “horizontal magnitude” is \(r=\sin\gamma\). Base yaw \(q_0\) rotates that horizontal direction around \(Z\),
+          so:
+        </p>
+        <p>
+          \[
+            x = (\sin\gamma)\cos q_0,\qquad
+            y = (\sin\gamma)\sin q_0
+          \]
+        </p>
+        <p class="muted">
+          The vertical component is unchanged by yaw:
+        </p>
+        <p>
+          \[
+            z = \cos\gamma
+          \]
+        </p>
+
+        <p class="muted">
+          Therefore the unit tool-axis/spinner-axis direction in world coordinates is:
+        </p>
+        <p>
+          \[
+            \hat t =
+            \begin{bmatrix}
+              \sin\gamma\cos q_0\\
+              \sin\gamma\sin q_0\\
+              \cos\gamma
+            \end{bmatrix}
+          \]
+        </p>
+        <div class="note">
+          Use radians inside \(\sin(\cdot),\cos(\cdot)\).
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Step 2 — choose an in-plane reference direction \(\hat v\) in world</h2>
+        <p class="muted">
+          To define the \((\hat u,\hat v)\) basis, you need one additional direction that you can describe in world coordinates.
+          A practical choice is a direction that lies in the bracket face, such as the wrist pitch axis direction.
+        </p>
+        <p class="muted">
+          If you want \(\hat v\) to represent the <b>pitch-axis direction</b>, then in the world frame it rotates with the base yaw \(q_0\).
+          Let \(\hat v_0=[0,1,0]^T\) be the pitch axis direction when \(q_0=0\). After yaw:
+        </p>
+        <p>
+          \[
+            \hat v(q_0)=R_z(q_0)\hat v_0=
+            \begin{bmatrix}
+              -\sin q_0\\
+              \cos q_0\\
+              0
+            \end{bmatrix}
+          \]
+        </p>
+        <p class="muted">
+          This \(\hat v(q_0)\) is the same physical axis direction, expressed in world coordinates.
+        </p>
+        <div class="warnbox">
+          \(\hat v\) must not be parallel to \(\hat t\). If they become nearly parallel, the cross product will be near zero and cannot be normalized.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Step 3 — build \(\hat u\) from a cross product, then re-orthogonalize</h2>
+        <p class="muted">
+          Compute:
+        </p>
+        <p>
+          \[
+            \hat u = \frac{\hat v \times \hat t}{\|\hat v \times \hat t\|}
+          \]
+        </p>
+        <p class="muted">
+          In the common case where you use:
+          \[
+            \hat t=
+            \begin{bmatrix}
+              \sin\gamma\cos q_0\\
+              \sin\gamma\sin q_0\\
+              \cos\gamma
+            \end{bmatrix},
+            \quad
+            \hat v(q_0)=
+            \begin{bmatrix}
+              -\sin q_0\\
+              \cos q_0\\
+              0
+            \end{bmatrix}
+          \]
+          the cross product simplifies to:
+        </p>
+        <p>
+          \[
+            \hat u =
+            \hat v\times \hat t =
+            \begin{bmatrix}
+              \cos q_0\cos\gamma\\
+              \sin q_0\cos\gamma\\
+              -\sin\gamma
+            \end{bmatrix}
+          \]
+        </p>
+        <p class="muted">
+          (This vector already has unit length, so the normalization step does not change it, assuming exact math.)
+        </p>
+
+        <h2>Component formula for the cross product (general)</h2>
+        <p class="muted">
+          If you have arbitrary vectors:
+        </p>
+        <p>
+          \[
+            \mathbf{t}=\begin{bmatrix}t_x\\t_y\\t_z\end{bmatrix},\qquad
+            \mathbf{v}=\begin{bmatrix}v_x\\v_y\\v_z\end{bmatrix}
+          \]
+        </p>
+        <p class="muted">
+          and you define:
+        </p>
+        <p>
+          \[
+            \mathbf{u}=\mathbf{v}\times\mathbf{t}
+          \]
+        </p>
+        <p class="muted">
+          then the components are:
+        </p>
+        <p>
+          \[
+            \mathbf{u}=
+            \begin{bmatrix}
+              u_x\\u_y\\u_z
+            \end{bmatrix}
+            =
+            \begin{bmatrix}
+              v_y t_z - v_z t_y\\
+              v_z t_x - v_x t_z\\
+              v_x t_y - v_y t_x
+            \end{bmatrix}
+          \]
+        </p>
+        <p class="muted">
+          To make it a unit vector:
+        </p>
+        <p>
+          \[
+            \hat{\mathbf{u}}=\frac{\mathbf{u}}{\|\mathbf{u}\|},\qquad
+            \|\mathbf{u}\|=\sqrt{u_x^2+u_y^2+u_z^2}
+          \]
+        </p>
+        <div class="note">
+          Order matters: \(\mathbf{t}\times\mathbf{v}=-(\mathbf{v}\times\mathbf{t})\).
+        </div>
+
+        <h2>Where does \(u_x=v_y t_z - v_z t_y\) come from?</h2>
+        <p class="muted">
+          A compact definition of the cross product uses a determinant:
+        </p>
+        <p>
+          \[
+            \mathbf{v}\times\mathbf{t}=
+            \begin{vmatrix}
+              \hat{\mathbf{i}} & \hat{\mathbf{j}} & \hat{\mathbf{k}}\\
+              v_x & v_y & v_z\\
+              t_x & t_y & t_z
+            \end{vmatrix}
+          \]
+        </p>
+        <p class="muted">
+          Expanding this determinant along the first row gives:
+        </p>
+        <p>
+          \[
+            \mathbf{u}
+            =
+            \hat{\mathbf{i}}
+            \begin{vmatrix}
+              v_y & v_z\\
+              t_y & t_z
+            \end{vmatrix}
+            -
+            \hat{\mathbf{j}}
+            \begin{vmatrix}
+              v_x & v_z\\
+              t_x & t_z
+            \end{vmatrix}
+            +
+            \hat{\mathbf{k}}
+            \begin{vmatrix}
+              v_x & v_y\\
+              t_x & t_y
+            \end{vmatrix}
+          \]
+        </p>
+        <p class="muted">
+          Therefore the \(x\)-component is the coefficient of \(\hat{\mathbf{i}}\):
+        </p>
+        <p>
+          \[
+            u_x=
+            \begin{vmatrix}
+              v_y & v_z\\
+              t_y & t_z
+            \end{vmatrix}
+            = v_y t_z - v_z t_y
+          \]
+        </p>
+        <div class="note">
+          Intuition: \(u_x\) depends only on the \(y,z\) components because it is the signed “area term” from projecting both vectors into the \(yz\) plane.
+        </div>
+        <p class="muted">
+          Then recompute \(\hat v\) so the basis is orthonormal:
+        </p>
+        <p>
+          \[
+            \hat v \leftarrow \hat t \times \hat u
+          \]
+        </p>
+        <p class="muted">
+          Now \((\hat u,\hat v,\hat t)\) are:
+        </p>
+        <ul class="muted">
+          <li>unit length,</li>
+          <li>mutually perpendicular,</li>
+          <li>right-handed (because \(\hat u \times \hat v = \hat t\)).</li>
+        </ul>
+      </div>
+
+      <footer>
+        File: <code>docs/IK/uv_basis_world.html</code>
+      </footer>
+    </div>
+  </body>
+</html>
+

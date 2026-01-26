@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Add spinner + gripper (effects on FK/IK)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #7aa2ff;
+        --accent2: #9ef0c3;
+        --warn: #ffd27a;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 1000px; margin: 0 auto; padding: 40px 18px 60px; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      h2 { font-size: 18px; margin: 14px 0 10px; color: #f2f6ff; }
+      h3 { font-size: 16px; margin: 14px 0 8px; color: #f2f6ff; }
+      p { margin: 8px 0; }
+      ul, ol { margin: 8px 0 0 18px; }
+      li { margin: 6px 0; }
+      .muted { color: var(--muted); }
+      .note {
+        border-left: 3px solid var(--accent2);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .warnbox {
+        border-left: 3px solid var(--warn);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      code, pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      pre {
+        background: rgba(14, 22, 48, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 12px;
+        overflow: auto;
+      }
+      footer { margin-top: 22px; color: var(--muted); font-size: 13px; }
+    </style>
+
+    <!-- MathJax for readable equations -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Add spinner + gripper: what changes in FK/IK</h1>
+        <p class="muted">
+          You currently model a 4-DOF arm (base yaw + shoulder/elbow/wrist pitch) with a fixed TCP at the end of \(L_3\).
+          Adding the last two DOFs (wrist spinner/roll + gripper open/close) is easy if the spinner axis is centered on the TCP,
+          but becomes more interesting if the spinner axis is <b>offset</b> and the gripper is <b>eccentric</b> around that axis.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>1) What you are adding</h2>
+        <ul class="muted">
+          <li><b>Spinner (roll) joint</b>: an additional revolute joint \(q_4\) whose axis is parallel to the <b>wrist centerline / tool axis</b> (i.e., perpendicular to the wrist pitch axis).</li>
+          <li><b>Gripper</b>: an actuator \(q_5\) (open/close). Kinematically it is usually not a rotation of the arm chain; it changes grasp width, not pose.</li>
+          <li><b>Offsets</b>:
+            <ul>
+              <li>Spinner axis is translated from the wrist pitch frame by a fixed vector (offset in two coordinates in the wrist/tool frame).</li>
+              <li>TCP/gripper mounting point is not centered on the spinner axis, so rotating \(q_4\) moves the TCP on a circle of radius \(R\) in the plane perpendicular to the spinner axis.</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="note">
+          The key complication is: <b>roll can affect position</b> if the TCP is eccentric about the roll axis. If the TCP were centered, roll would only affect orientation.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2) How FK changes</h2>
+        <p class="muted">
+          Conceptually, keep your existing FK up to the wrist pitch frame, then append two rigid transforms and one roll rotation.
+        </p>
+
+        <h3>Most practical viewpoint (matches your current repo code)</h3>
+        <p class="muted">
+          In your current implementation, <code>apps/api/src/modules/kinematics.js</code> implements:
+        </p>
+        <ul class="muted">
+          <li>\(FK(q_0,q_1,q_2)\rightarrow (x,y,z)\), and this output is the position of the <b>free end of \(L_3\)</b>.</li>
+          <li>This FK is already specialized to the \(\gamma=\pi\) case (tool axis assumed “down”), so \(q_3\) does not affect position there.</li>
+        </ul>
+        <p class="muted">
+          To add spinner+gripper without drowning in frames, treat your current FK output as a <b>reference point on the wrist centerline</b>:
+        </p>
+        <p>
+          \[
+            P_{ref} = [x,y,z]^T
+          \]
+        </p>
+        <p class="muted">
+          Then compute the TCP (the chess piece centerline when grasped) by adding:
+        </p>
+        <ul class="muted">
+          <li>a fixed <b>spinner axis offset</b> (2 parameters) perpendicular to the tool axis, and</li>
+          <li>a roll-dependent <b>eccentric offset</b> of radius \(R\) from the spinner axis to the piece centerline.</li>
+        </ul>
+
+        <h3>Step A — tool axis direction \(\hat{t}\)</h3>
+        <p class="muted">
+          The spinner axis is parallel to the tool axis (wrist centerline). You need a unit direction \(\hat{t}\) in world coordinates.
+        </p>
+        <ul class="muted">
+          <li>
+            If you keep \(\gamma=\pi\) during motion (as your current FK assumes), the tool axis is simply:
+            \[
+              \hat{t} = [0,0,-1]^T
+            \]
+          </li>
+          <li>
+            If later you use a general FK with \(\gamma=q_1+q_2+q_3\), then:
+            \[
+              \hat{t} =
+              \begin{bmatrix}
+                \sin\gamma \cos q_0\\
+                \sin\gamma \sin q_0\\
+                \cos\gamma
+              \end{bmatrix}
+            \]
+            (angles in radians inside \(\sin,\cos\)).
+          </li>
+        </ul>
+
+        <h3>Step B — define a perpendicular basis \((\hat{u},\hat{v})\)</h3>
+        <p class="muted">
+          The spinner axis offset is 2D: it lives in the plane perpendicular to \(\hat{t}\).
+          Build two perpendicular unit vectors spanning that plane:
+        </p>
+        <p class="muted">
+          To make \((\hat u,\hat v)\) meaningful on your hardware, choose \(\hat v\) to align with a repeatable direction on the wrist/bracket.
+          A very practical choice is the <b>pitch-axis direction</b> (the direction of the wrist pitch axis), expressed in world coordinates.
+        </p>
+        <p class="muted">
+          In your kinematic convention, the pitch-axis direction when \(q_0=0\) is \(\hat v_0=[0,1,0]^T\).
+          After base yaw \(q_0\), the same physical axis expressed in world coordinates is:
+        </p>
+        <p>
+          \[
+            \hat v(q_0)=
+            \begin{bmatrix}
+              -\sin q_0\\
+              \cos q_0\\
+              0
+            \end{bmatrix}
+          \]
+        </p>
+        <p class="muted">
+          Now build \(\hat u\) by the right-hand rule and normalize:
+        </p>
+        <p>
+          \[
+            \hat u = \frac{\hat v \times \hat t}{\|\hat v \times \hat t\|}
+          \]
+        </p>
+        <p class="muted">
+          Then recompute \(\hat v\) so the basis is orthonormal:
+        </p>
+        <p>
+          \[
+            \hat v \leftarrow \hat t \times \hat u
+          \]
+        </p>
+        <div class="note">
+          With \(\hat t=[\sin\gamma\cos q_0,\sin\gamma\sin q_0,\cos\gamma]^T\) and \(\hat v(q_0)\) as above,
+          the cross product simplifies to a closed form:
+          \[
+            \hat u =
+            \begin{bmatrix}
+              \cos q_0\cos\gamma\\
+              \sin q_0\cos\gamma\\
+              -\sin\gamma
+            \end{bmatrix}
+          \]
+          (unit length in exact math).
+        </div>
+
+        <h3>Step C — spinner axis location (2 parameters)</h3>
+        <p class="muted">
+          Let \((d_u,d_v)\) be the constant offset (mm) from the wrist centerline at \(P_{ref}\) to the spinner axis, expressed in the \((\hat{u},\hat{v})\) basis:
+        </p>
+        <p>
+          \[
+            P_{spin} = P_{ref} + d_u \hat{u} + d_v \hat{v}
+          \]
+        </p>
+
+        <h3>How to measure \((d_u,d_v)\) in practice</h3>
+        <ol class="muted">
+          <li>Move the arm to a pose where the tool axis is approximately vertical (easy to reason about).</li>
+          <li>Identify the <b>wrist centerline</b> and the <b>spinner axis centerline</b> on the hardware (use calipers; or mark their projections on the table if you can).</li>
+          <li>Measure the signed lateral offsets between those centerlines (mm). Those are your \((d_u,d_v)\).</li>
+        </ol>
+        <div class="note">
+          If your tool axis is vertical during measurement, then \((d_u,d_v)\) are literally “X and Y offsets” on the table plane.
+        </div>
+
+        <h3>Step D — eccentric offset to the chess-piece centerline (radius \(R\))</h3>
+        <p class="muted">
+          Let \(R\) be the distance (mm) from the spinner axis to the <b>TCP centerline</b> (the chess piece centerline while grasped).
+          Let \(\phi_0\) be the “zero-roll” angle defining where the TCP sits around the spinner axis when \(q_4=0\).
+        </p>
+        <p class="muted">
+          Then the roll-dependent offset is:
+        </p>
+        <p>
+          \[
+            \Delta P_{ecc}(q_4) = R\Big(\cos(q_4+\phi_0)\hat{u} + \sin(q_4+\phi_0)\hat{v}\Big)
+          \]
+        </p>
+        <p class="muted">
+          and the final TCP position is:
+        </p>
+        <p>
+          \[
+            P_{TCP} = P_{spin} + \Delta P_{ecc}(q_4) + L_{axis}\,\hat{t}
+          \]
+        </p>
+        <p class="muted">
+          Expanding \(P_{spin}\) and \(\Delta P_{ecc}\), this can be written as one expression:
+        </p>
+        <p>
+          \[
+            P_{TCP} =
+            P_{ref}
+            + d_u \hat{u} + d_v \hat{v}
+            + R\Big(\cos(q_4+\phi_0)\hat{u} + \sin(q_4+\phi_0)\hat{v}\Big)
+            + L_{axis}\,\hat{t}
+          \]
+        </p>
+        <p class="muted">
+          where \(L_{axis}\) is an optional constant shift along the tool axis (mm) if your “piece centerline point” is not in the same cross-section as \(P_{ref}\).
+          If your current FK’s \(P_{ref}\) already corresponds to the height you care about, set \(L_{axis}=0\).
+        </p>
+
+        <h3>How to measure \(R\) (and \(\phi_0\))</h3>
+        <ol class="muted">
+          <li>Close the gripper on a representative chess piece and decide what point you consider the TCP (usually the piece centerline).</li>
+          <li>Measure the perpendicular distance from the spinner axis centerline to that piece centerline (calipers). That is \(R\).</li>
+          <li>Define your roll zero \(q_4=0\) (e.g., jaws parallel to board files). Set \(\phi_0=0\) by definition in that configuration; otherwise measure \(\phi_0\).</li>
+        </ol>
+        <div class="warnbox">
+          If the gripper is not symmetric, the “piece centerline” may shift slightly with gripper opening \(q_5\).
+          Start by treating \(R\) as constant for your typical grasp width; refine later with \(R(q_5)\) if needed.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3) How to implement IK (clear path)</h2>
+        <p class="muted">
+          Your current IK already uses a hybrid strategy:
+          an analytical initial guess (assuming \(dX=0\)) followed by a Newton solve that accounts for \(dX\).
+          The spinner+gripper extension fits the same pattern: keep an analytical stage to generate a good initial guess, then refine numerically for the full model.
+        </p>
+
+        <h3>Stage 0 — define what IK should solve</h3>
+        <ul class="muted">
+          <li>Inputs: desired TCP position \(P^{des}=[x,y,z]^T\) (world) and desired tool pitch \(\gamma_{des}\) (often \(\pi\) for “down”).</li>
+          <li>Optional: desired roll \(q_4\) (jaw alignment), and gripper command \(q_5\) (open/close).</li>
+          <li>Outputs: joint angles \(q_0..q_3\) (and optionally \(q_4,q_5\)).</li>
+        </ul>
+
+        <h3>Stage 1 — choose \(q_4\) (roll) and \(q_5\) (gripper)</h3>
+        <p class="muted">
+          For chess, it’s common to choose roll from task logic (e.g. align jaws with files/ranks) and treat \(q_5\) as purely task-level.
+          If you choose \(q_4\) first, the remaining IK becomes “4-DOF position+pitch” with a known roll-dependent TCP offset.
+        </p>
+        <div class="note">
+          Common chess heuristic (when the tool axis is close to vertical): set spinner roll to cancel base yaw so the jaws remain parallel to the board files:
+          \[
+            q_4 \approx -q_0 + q_{4,0}
+          \]
+          where \(q_{4,0}\) is your “jaws parallel to files at \(q_0=0\)” constant.
+          If the tool axis tilts significantly, this simple rule no longer perfectly preserves board alignment.
+        </div>
+
+        <h3>Stage 2 — convert desired TCP point into an equivalent “reference-point target”</h3>
+        <p class="muted">
+          The main trick is to remove the roll-dependent attachment offsets before solving the arm IK.
+          Using the FK equation from section (2):
+        </p>
+        <p>
+          \[
+            P_{TCP} =
+            P_{ref}
+            + d_u \hat{u} + d_v \hat{v}
+            + R\Big(\cos(q_4+\phi_0)\hat{u} + \sin(q_4+\phi_0)\hat{v}\Big)
+            + L_{axis}\,\hat{t}
+          \]
+        </p>
+        <p class="muted">
+          For IK, you want to solve for the arm such that \(P_{TCP}=P^{des}\).
+          If \(q_4\) is chosen, treat the attachment offset as:
+        </p>
+        <p>
+          \[
+            \Delta(q_0,q_1,q_2,q_3;q_4)
+            =
+            d_u \hat{u} + d_v \hat{v}
+            + R\Big(\cos(q_4+\phi_0)\hat{u} + \sin(q_4+\phi_0)\hat{v}\Big)
+            + L_{axis}\,\hat{t}
+          \]
+        </p>
+        <p class="muted">
+          Then the arm IK target becomes:
+        </p>
+        <p>
+          \[
+            P^{des}_{ref} = P^{des} - \Delta
+          \]
+        </p>
+        <div class="warnbox">
+          \(\Delta\) depends on \(\hat t,\hat u,\hat v\), and those depend on \((q_0,\gamma)\) (and thus on unknown joint angles).
+          That is why a purely closed-form IK is messy when \(R\neq 0\): roll couples into position.
+        </div>
+
+        <h3>How to “glue” old IK and the new attachment (practical loop)</h3>
+        <p class="muted">
+          You can keep your existing 4‑DOF IK almost unchanged by wrapping it in a short fixed-point iteration:
+        </p>
+        <ol class="muted">
+          <li>Start with \(q_0^{(0)}=\operatorname{atan2}(y,x)\) and \(\gamma=\gamma_{des}\) (often \(\pi\)).</li>
+          <li>Compute \(q_4^{(0)}\) from your rule (e.g. \(q_4^{(0)}=-q_0^{(0)}+q_{4,0}\)).</li>
+          <li>Compute \(\hat t,\hat u,\hat v\) and \(\Delta^{(0)}\), then set \(P_{ref}^{des,(0)}=P^{des}-\Delta^{(0)}\).</li>
+          <li>Run your existing IK on \(P_{ref}^{des,(0)}\) to get \((q_0^{(1)},q_1^{(1)},q_2^{(1)},q_3^{(1)})\).</li>
+          <li>Update \(q_4^{(1)}\) from the new \(q_0^{(1)}\), recompute \(\Delta^{(1)}\), and repeat 2–3 times.</li>
+        </ol>
+        <div class="note">
+          After this loop, optionally run Newton/LM on the full position residual
+          \(F(q_0..q_3)=P_{TCP}(q_0..q_3,q_4(q_0))-P^{des}\) to refine the solution.
+        </div>
+
+        <h3>Stage 3 — Newton/LM refinement after the 2–3 iteration \(q_0\) loop</h3>
+        <p class="muted">
+          After the fixed-point loop above (which “glues” your old IK to the attachment), you have a good initial guess.
+          Use that guess as the starting point for a short Newton (or LM) refinement on the full TCP position residual.
+        </p>
+        <p class="muted">
+          With \(q_4\) set by your policy (e.g. \(q_4=-q_0+q_{4,0}\)), define a 3-vector residual:
+        </p>
+        <p>
+          \[
+            F(q_0,q_1,q_2,q_3)=P_{TCP}(q_0,q_1,q_2,q_3,q_4(q_0)) - P^{des}
+          \]
+        </p>
+        <div class="note">
+          Clarification:
+          \(P^{des}\) is the <b>constant</b> world position you want to reach (the IK input).
+          \(P_{TCP}(q)\) is the <b>forward-kinematics expression</b> that computes the TCP position from joint angles \(q\).
+          The Jacobian is the matrix of partial derivatives of that FK expression:
+          \[
+            J(q)=\frac{\partial P_{TCP}}{\partial [q_0,q_1,q_2,q_3]}
+          \]
+          In code you can compute \(J\) either analytically (differentiate the FK equations) or numerically (finite differences).
+        </div>
+        <p class="muted">
+          Then apply a few Newton steps (or LM steps) to reduce \(\|F\|\). In practice you can:
+        </p>
+        <ul class="muted">
+          <li>Use a numerical Jacobian (finite differences) for \(J=\frac{\partial F}{\partial [q_0,q_1,q_2,q_3]}\).</li>
+          <li>Run 3–10 iterations, stop when \(\|F\|\) is small or when improvement stalls.</li>
+          <li>Enforce joint limits after each update.</li>
+        </ul>
+        <div class="note">
+          This mirrors your current approach with \(dX\): a fast approximate solve produces a good seed, and Newton cleans up the remaining coupled error.
+        </div>
+      </div>
+
+      <footer>
+        File: <code>docs/IK/add_spinner_gripper.html</code>
+      </footer>
+    </div>
+  </body>
+</html>
+
