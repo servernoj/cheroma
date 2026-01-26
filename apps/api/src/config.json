@@ -11,8 +11,8 @@
       "home": 0,
       "kinematics": "q0",
       "correction": {
-        "gain": 1,
-        "offset": 0
+        "gain": 0.9653,
+        "offset": 1.1319
       }
     },
     "shoulder": {
@@ -25,8 +25,8 @@
       "home": 0,
       "kinematics": "q1",
       "correction": {
-        "gain": 1,
-        "offset": 0
+        "gain": 1.0299,
+        "offset": 5.8867
       }
     },
     "elbow": {
@@ -39,8 +39,8 @@
       "home": 150,
       "kinematics": "q2",
       "correction": {
-        "gain": 1,
-        "offset": 0
+        "gain": 1.0155,
+        "offset": -0.7111
       }
     },
     "wrist": {
