@@ -1,17 +1,5 @@
 import config from '@/config.json' with {type: 'json'}
 
-/**
- * @type {{[name in SegmentName]: number}}
- */
-// @ts-ignore
-const L = Object.entries(config.segments).reduce(
-  (acc, [segmentName, segmentData]) => {
-    acc[segmentName] = segmentData.length
-    return acc
-  },
-  {}
-)
-
 const k2s = Object.entries(config.servos).reduce(
   (acc, [servoName, { kinematics }]) => {
     acc[kinematics] = servoName
@@ -39,7 +27,7 @@ const d2r = d => d * Math.PI / 180
  * @returns {KinematicsOutput}
  */
 const FK = ({ q0, q1, q2 }) => {
-  const { L1, L2, L3, H, dX } = L
+  const { L1, L2, L3, H, dX } = config.geom
   const r = (dX * Math.cos(d2r(q1)) + L1 * Math.sin(d2r(q1))) + L2 * Math.sin(d2r(q1 + q2))
   const z = H - L3 - dX * Math.sin(d2r(q1)) + L1 * Math.cos(d2r(q1)) + L2 * Math.cos(d2r(q1 + q2))
   const x = r * Math.cos(d2r(q0))
@@ -53,7 +41,7 @@ const FK = ({ q0, q1, q2 }) => {
  * @returns {KinematicsInput}
  */
 const IK = ({ x, y, z }) => {
-  const { L1, L2, L3, H, dX } = L
+  const { L1, L2, L3, H, dX } = config.geom
   const q0 = Math.atan2(y, x)
   const r = Math.hypot(x, y)
   const rw = r

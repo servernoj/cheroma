@@ -34,11 +34,9 @@ declare global {
     [name in ServoName]: number | null
   }
   // --
-  type SegmentName = keyof typeof config['segments']
-  type SegmentData = {
-    [name in SegmentName]: {
-      length: number
-    }
+  type GeomName = keyof typeof config['geom']
+  type GeomData = {
+    [name in GeomName]: number
   }
   type Config = {
     units: {

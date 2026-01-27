@@ -11,8 +11,8 @@
       "home": 0,
       "kinematics": "q0",
       "correction": {
-        "gain": 0.9653,
-        "offset": 1.1319
+        "gain": 1,
+        "offset": 0
       }
     },
     "shoulder": {
@@ -25,8 +25,8 @@
       "home": 0,
       "kinematics": "q1",
       "correction": {
-        "gain": 1.0299,
-        "offset": 5.8867
+        "gain": 1,
+        "offset": 0
       }
     },
     "elbow": {
@@ -39,8 +39,8 @@
       "home": 150,
       "kinematics": "q2",
       "correction": {
-        "gain": 1.0155,
-        "offset": -0.7111
+        "gain": 1,
+        "offset": 0
       }
     },
     "wrist": {
@@ -58,21 +58,15 @@
       }
     }
   },
-  "segments": {
-    "H": {
-      "length": 130
-    },
-    "L1": {
-      "length": 211
-    },
-    "L2": {
-      "length": 265
-    },
-    "L3": {
-      "length": 100
-    },
-    "dX": {
-      "length": 20
-    }
+  "geom": {
+    "H": 130,
+    "L1": 211,
+    "L2": 265,
+    "L3": 100,
+    "dX": 20,
+    "dU": 0,
+    "dV": -10,
+    "La": 163,
+    "R": 27
   }
 }
