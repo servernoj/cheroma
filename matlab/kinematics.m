@@ -18,7 +18,6 @@ function out = kinematics()
   dU = sym('dU');
   dV = sym('dV');
   dX = sym('dX');
-  % Gamma = sym('Gamma');
   q0 = sym('q0');
   q1 = sym('q1');
   q2 = sym('q2');

@@ -14,12 +14,32 @@ router.post(
         x: z.number(),
         y: z.number(),
         z: z.number()
+      })
+    })
+  }),
+  async (req, res) => {
+    const { to } = res.locals.parsed.body
+    const target = IK(to)
+    await servo.toPoint(K2S(target), [], { relax: true })
+    res.sendStatus(200)
+  }
+)
+
+router.post(
+  '/down-to',
+  validator({
+    body: z.object({
+      to: z.object({
+        x: z.number(),
+        y: z.number(),
+        z: z.number()
       }),
       via: z.object({
         base: z.number(),
         shoulder: z.number(),
         elbow: z.number(),
         wrist: z.number(),
+        spinner: z.number()
       }).array().min(0).optional()
     })
   }),
@@ -27,13 +47,8 @@ router.post(
     const { to, via = [] } = res.locals.parsed.body
     const target = IK(to)
     console.log(Object.values(target).map(p => Math.round(p * 100) / 100))
-    const preTarget = IK({
-      ...to,
-      z: to.z + 100
-    })
     await servo.toPoint(K2S(target), [
       ...via,
-      K2S(preTarget)
     ], { relax: true })
     res.sendStatus(200)
   }

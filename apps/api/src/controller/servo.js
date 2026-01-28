@@ -57,6 +57,7 @@ router.post(
       shoulder: z.number(),
       elbow: z.number(),
       wrist: z.number(),
+      spinner: z.number(),
     }),
   }),
   async (req, res) => {

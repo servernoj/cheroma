@@ -47,7 +47,7 @@ declare global {
       length: 'mm'
     }
     servos: ServoData
-    segments: SegmentData
+    geom: GeomData
   }
 }
 

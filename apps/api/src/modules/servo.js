@@ -216,7 +216,7 @@ const toHome = async (options = { slow: true, relax: true }) => {
           channel,
           pulseWidthUs: angleDegToPulseUs({ angleDeg: home, servoName })
         })
-        await sleep(200)
+        await sleep(500)
         currentPosition[servoName] = home
       },
       bulkSize: 1
