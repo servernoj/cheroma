@@ -18,7 +18,7 @@ function out = kinematics()
   dU = sym('dU');
   dV = sym('dV');
   dX = sym('dX');
-  Gamma = sym('Gamma');
+  % Gamma = sym('Gamma');
   q0 = sym('q0');
   q1 = sym('q1');
   q2 = sym('q2');
@@ -26,14 +26,15 @@ function out = kinematics()
   q4 = sym('q4');
 
   % FK
-  r = dX * cos(q1) + L1 * sin(q1) + L2 * sin(q1 + q2) + L3 * sin(q1 + q2 + q3);
+  Gamma = q1 + q2 + q3
+  r = dX * cos(q1) + L1 * sin(q1) + L2 * sin(q1 + q2) + L3 * sin(Gamma);
   t = [sin(Gamma) * cos(q0); sin(Gamma) * sin(q0); cos(Gamma)];
   v = [-sin(q0); cos(q0); 0];
   u = [cos(q0) * cos(Gamma); sin(q0) * cos(Gamma); -sin(Gamma)];
   Pref = [
           r * cos(q0);
           r * sin(q0);
-          H - dX * sin(q1) + L1 * cos(q1) + L2 * cos(q1 + q2) + L3 * cos(q1 + q2 + q3)
+          H - dX * sin(q1) + L1 * cos(q1) + L2 * cos(q1 + q2) + L3 * cos(Gamma)
           ];
   Pspin = dU * u + dV * v;
   Pecc = R * (cos(q4) * u + sin(q4) * v);
@@ -99,9 +100,14 @@ function out = kinematics()
     Q = [q0_; 0; 0; 0; q4_(q0_)];
     eps = 1e-2;
     found = false;
+    subsList = {q0, q1, q2, q3, q4, H, L1, L2, L3, La, dX, dU, dV, R};
 
     for i = 1:100
-      delta = double(subs(Delta, {q0, q4, Gamma, R, dU, dV, La}, {Q(1), Q(5), Gamma_, geom.R, geom.dU, geom.dV, geom.La}));
+      delta = double(subs( ...
+        Delta, ...
+        subsList, ...
+        {Q(1), Q(2), Q(3), Q(4), Q(5), geom.H, geom.L1, geom.L2, geom.L3, geom.La, geom.dX, geom.dU, geom.dV, geom.R} ...
+      ));
 
       try
         Q = IK0(P - delta, Gamma_);
@@ -117,8 +123,8 @@ function out = kinematics()
 
       P_ = double(subs( ...
         Ptcp, ...
-        {q0, q1, q2, q3, q4, H, L1, L2, L3, La, dX, dU, dV, R, Gamma}, ...
-        {Q(1), Q(2), Q(3), Q(4), Q(5), geom.H, geom.L1, geom.L2, geom.L3, geom.La, geom.dX, geom.dU, geom.dV, geom.R, Gamma_} ...
+        subsList, ...
+        {Q(1), Q(2), Q(3), Q(4), Q(5), geom.H, geom.L1, geom.L2, geom.L3, geom.La, geom.dX, geom.dU, geom.dV, geom.R} ...
       ));
 
       if (norm(P - P_) < eps)

@@ -22,38 +22,89 @@ const r2d = r => r * 180 / Math.PI
 const d2r = d => d * Math.PI / 180
 
 /**
- * Forward kinematics
+ * Forward kinematics helper
  * @param {KinematicsInput} args
- * @returns {KinematicsOutput}
+ * @param {number} [gamma]
+ * @returns {{p: Raw3D, delta: Raw3D}}
  */
-const FK = ({ q0, q1, q2 }) => {
-  const { L1, L2, L3, H, dX } = config.geom
-  const r = (dX * Math.cos(d2r(q1)) + L1 * Math.sin(d2r(q1))) + L2 * Math.sin(d2r(q1 + q2))
-  const z = H - L3 - dX * Math.sin(d2r(q1)) + L1 * Math.cos(d2r(q1)) + L2 * Math.cos(d2r(q1 + q2))
-  const x = r * Math.cos(d2r(q0))
-  const y = r * Math.sin(d2r(q0))
-  return { x, y, z }
+const FK_ = ({ q0, q1, q2, q3, q4 }, gamma) => {
+  const { L1, L2, L3, H, dX, dU, dV, La, R } = config.geom
+  gamma = gamma ?? q1 + q2 + q3
+  const r = (
+    dX * Math.cos(d2r(q1)) +
+    L1 * Math.sin(d2r(q1)) +
+    L2 * Math.sin(d2r(q1 + q2)) +
+    L3 * Math.sin(d2r(gamma))
+  )
+  const t = [
+    Math.sin(d2r(gamma)) * Math.cos(d2r(q0)),
+    Math.sin(d2r(gamma)) * Math.sin(d2r(q0)),
+    Math.cos(d2r(gamma))
+  ]
+  const v = [
+    -Math.sin(d2r(q0)),
+    Math.cos(d2r(q0)),
+    0
+  ]
+  const u = [
+    Math.cos(d2r(q0)) * Math.cos(d2r(gamma)),
+    Math.sin(d2r(q0)) * Math.cos(d2r(gamma)),
+    -Math.sin(d2r(gamma))
+  ]
+  const p = [
+    r * Math.cos(d2r(q0)),
+    r * Math.sin(d2r(q0)),
+    H - dX * Math.sin(d2r(q1)) + L1 * Math.cos(d2r(q1)) + L2 * Math.cos(d2r(q1 + q2)) + L3 * Math.cos(d2r(gamma))
+  ]
+  const delta = Array(3).fill().map(
+    (_, idx) => {
+      const spin = dU * u[idx] + dV * v[idx]
+      const ecc = R * (Math.cos(d2r(q4)) * u[idx] + Math.sin(d2r(q4)) * v[idx])
+      const up = La * t[idx]
+      return spin + ecc + up
+    }
+  )
+  return { p, delta }
 }
 
 /**
- * Inverse kinematics
+ * Forward kinematics helper
+ * @param {KinematicsInput} Q
+ * @returns {KinematicsOutput}
+ */
+const FK = (Q) => {
+  const { p, delta } = FK_(Q)
+  const mapping = ['x', 'y', 'z']
+  return mapping.reduce(
+    /** @param {*} acc  */
+    (acc, label, idx) => {
+      acc[label] = p[idx] + delta[idx]
+      return acc
+    },
+    {}
+  )
+}
+
+const q4 = q0 => q0
+
+
+/**
+ * Inverse kinematics helper
  * @param {KinematicsOutput} args
+ * @param {number} gamma
  * @returns {KinematicsInput}
  */
-const IK = ({ x, y, z }) => {
+const IK_ = ({ x, y, z }, gamma) => {
   const { L1, L2, L3, H, dX } = config.geom
   const q0 = Math.atan2(y, x)
   const r = Math.hypot(x, y)
-  const rw = r
-  const zw = (z - H) + L3
+  const rw = r - L3 * Math.sin(d2r(gamma))
+  const zw = z - H - L3 * Math.cos(d2r(gamma))
   // -- Initial guess assuming dX = 0
-  const D = Math.max(
-    -1,
-    Math.min(
-      1,
-      (rw * rw + zw * zw - L1 * L1 - L2 * L2) / (2 * L1 * L2)
-    )
-  )
+  const D = (rw * rw + zw * zw - L1 * L1 - L2 * L2) / (2 * L1 * L2)
+  if (Math.abs(D) > 1) {
+    throw new Error('Position unreachable')
+  }
   const s = Math.sqrt(1 - D * D)
   const q2_r = [
     Math.atan2(+s, D),
@@ -89,13 +140,44 @@ const IK = ({ x, y, z }) => {
     q1 += - (J22 * fr - J12 * fz) / det
     q2 += - (-J21 * fr + J11 * fz) / det
   }
-  const q3 = Math.PI - q1 - q2
+  const q3 = d2r(gamma) - q1 - q2
   return {
     q0: r2d(q0),
     q1: r2d(q1),
     q2: r2d(q2),
-    q3: r2d(q3)
+    q3: r2d(q3),
+    q4: r2d(q4(q0))
   }
+}
+
+/**
+ * Inverse kinematics
+ * @param {KinematicsOutput} args
+ * @param {number} [gamma]
+ * @returns {KinematicsInput}
+ */
+const IK = ({ x, y, z }, gamma = 180) => {
+  const q0 = r2d(Math.atan2(y, x))
+  let Q = { q0, q1: 0, q2: 0, q3: 0, q4: q4(q0) }
+  let found = false
+  for (let i = 0; i < 100; i++) {
+    const { delta } = FK_(Q, gamma)
+    Q = IK_({
+      x: x - delta[0],
+      y: y - delta[1],
+      z: z - delta[2]
+    }, gamma)
+    const P = FK(Q)
+    const error = Math.hypot(P.x - x, P.y - y, P.z - z)
+    if (error < 1e-2) {
+      found = true
+      break
+    }
+  }
+  if (!found) {
+    console.warn('Solution not found')
+  }
+  return Q
 }
 
 export { FK, IK, K2S }

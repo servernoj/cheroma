@@ -10,12 +10,14 @@ declare global {
     q1: number
     q2: number
     q3: number
+    q4: number
   }
   type KinematicsOutput = {
     x: number
     y: number
     z: number
   }
+  type Raw3D = Array<number>
   // --
   type ServoCorrection = {
     gain: number

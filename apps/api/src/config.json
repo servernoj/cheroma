@@ -56,13 +56,27 @@
         "gain": 1,
         "offset": 0
       }
+    },
+    "spinner": {
+      "channel": 4,
+      "calPoints": [
+        [-90.0, 640],
+        [0.0, 1595],
+        [90.0, 2550]
+      ],
+      "home": 0,
+      "kinematics": "q4",
+      "correction": {
+        "gain": 1,
+        "offset": 0
+      }
     }
   },
   "geom": {
     "H": 130,
     "L1": 211,
     "L2": 265,
-    "L3": 100,
+    "L3": 50,
     "dX": 20,
     "dU": 0,
     "dV": -10,
