@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spring selection (counterbalance) — practical sizing notes</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --fg: #e9eefc;
+        --muted: #b8c0d9;
+        --card: #121a33;
+        --border: rgba(255, 255, 255, 0.12);
+        --accent: #7aa2ff;
+        --accent2: #9ef0c3;
+        --warn: #ffd27a;
+      }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, var(--bg), #070a14 70%);
+        color: var(--fg);
+        font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: 980px; margin: 0 auto; padding: 40px 18px 60px; }
+      .card {
+        background: rgba(18, 26, 51, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      }
+      h1 { font-size: 26px; margin: 0 0 8px; }
+      h2 { font-size: 18px; margin: 14px 0 10px; color: #f2f6ff; }
+      h3 { font-size: 16px; margin: 14px 0 8px; color: #f2f6ff; }
+      p { margin: 8px 0; }
+      ul, ol { margin: 8px 0 0 18px; }
+      li { margin: 6px 0; }
+      .muted { color: var(--muted); }
+      .note {
+        border-left: 3px solid var(--accent2);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .warnbox {
+        border-left: 3px solid var(--warn);
+        padding: 10px 12px;
+        background: rgba(14, 22, 48, 0.55);
+        border-radius: 10px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      code, pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      }
+      pre {
+        background: rgba(14, 22, 48, 0.7);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        overflow: auto;
+      }
+      footer { margin-top: 18px; color: var(--muted); font-size: 13px; }
+    </style>
+
+    <!-- MathJax for readable equations -->
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Spring selection for shoulder counterbalance (simplified worksheet)</h1>
+        <p class="muted">
+          Goal: reduce shoulder sag/backlash effects by mechanically assisting gravity torque with a spring.
+          This page covers a <b>simplified model</b> and the <b>minimum geometry</b> you must measure to choose a spring.
+        </p>
+        <div class="note">
+          Rule of thumb: don’t aim for 100% counterbalance on a hobby-servo arm. Start with ~50–80% so the arm still feels stable
+          and doesn’t “float up” aggressively.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>1) Simplified setup (the model we are sizing)</h2>
+        <ul class="muted">
+          <li>Only one joint: <b>shoulder</b>.</li>
+          <li>A point mass at the end of the upper arm (at the elbow location in the real robot).</li>
+          <li>Arm “relaxed” pose: pointing up. Arm “loaded/worst” pose: horizontal.</li>
+          <li>Spring is an extension spring with force \(F = F_u + k\,\Delta x\).</li>
+        </ul>
+        <p class="muted">
+          Given (your simplified numbers):
+        </p>
+        <ul class="muted">
+          <li>Mass at end: \(m = 0.5\,\mathrm{kg}\)</li>
+          <li>Upper arm length (shoulder to mass): \(L = 200\,\mathrm{mm} = 0.200\,\mathrm{m}\)</li>
+          <li>Distance between anchor points: about \(100\,\mathrm{mm}\) (one near the shoulder joint, one about halfway along the upper arm)</li>
+          <li>Anchor-to-anchor length increases by \(\Delta x = 10\,\mathrm{mm}\) from “up” to “horizontal”.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>2) Step A — compute the gravity torque at horizontal</h2>
+        <p class="muted">
+          Worst case is the arm roughly horizontal. Gravity torque about the shoulder is approximately:
+        </p>
+        <p>
+          \[
+            \tau_g \approx m g L
+          \]
+        </p>
+        <p class="muted">
+          With \(g \approx 9.81\,\mathrm{m/s^2}\):
+        </p>
+        <p>
+          \[
+            \tau_g \approx 0.5 \cdot 9.81 \cdot 0.200 \approx 0.981\ \mathrm{N\cdot m}
+          \]
+        </p>
+        <div class="note">
+          If you prefer kg·cm: \(1\,\mathrm{N\cdot m} \approx 10.2\,\mathrm{kg\cdot cm}\), so \(0.981\,\mathrm{N\cdot m}\approx 10.0\,\mathrm{kg\cdot cm}\).
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3) Step B — you must know the spring’s moment arm about the shoulder</h2>
+        <p class="muted">
+          This is the key missing “geometry parameter” needed to pick a spring.
+        </p>
+        <p class="muted">
+          Define \(r_\perp\) as the <b>perpendicular distance</b> from the shoulder axis to the spring’s line of action
+          (at the pose you care about, usually near horizontal).
+        </p>
+        <p>
+          \[
+            \tau_{spring} \approx F \, r_\perp
+          \]
+        </p>
+        <div class="warnbox">
+          The “distance between anchor points is 100&nbsp;mm” is <b>not automatically</b> \(r_\perp\).
+          Depending on how the spring is routed, \(r_\perp\) can be much smaller than the raw anchor distance.
+          For sizing, measure or estimate \(r_\perp\) directly from a side photo / CAD / ruler measurement.
+        </div>
+        <h3>How to compute \(r_\perp\) (planar, straight-line spring)</h3>
+        <p class="muted">
+          Work in the shoulder’s plane (your arm’s vertical plane). Use 2D coordinates \((x,z)\) with the <b>shoulder axis at the origin</b>.
+        </p>
+        <ul class="muted">
+          <li>Let the arm-side spring anchor point be at distance \(a\) from the shoulder axis along the upper arm.</li>
+          <li>Let \(\theta\) be the shoulder angle measured from “arm up” (\(\theta=0^\circ\)) toward “arm horizontal” (\(\theta=90^\circ\)).</li>
+          <li>Then the arm anchor position is:
+            \[
+              \mathbf{p}_A(\theta) =
+              \begin{bmatrix}
+                a\sin\theta\\
+                a\cos\theta
+              \end{bmatrix}
+            \]
+          </li>
+          <li>Let the base anchor point (fixed in the base frame) be:
+            \[
+              \mathbf{p}_B =
+              \begin{bmatrix}
+                x_B\\
+                z_B
+              \end{bmatrix}
+            \]
+          </li>
+          <li>If the spring is a straight line from \(\mathbf{p}_A\) to \(\mathbf{p}_B\), the force direction (unit vector) at the arm anchor is:
+            \[
+              \hat{\mathbf{f}} = \frac{\mathbf{p}_B - \mathbf{p}_A}{\|\mathbf{p}_B - \mathbf{p}_A\|}
+            \]
+          </li>
+          <li>Then the perpendicular moment arm is the perpendicular distance from the origin to that line of action:
+            \[
+              r_\perp(\theta) = \left|\det\left(\mathbf{p}_A(\theta),\hat{\mathbf{f}}(\theta)\right)\right|
+            \]
+            (units: mm if you use mm coordinates).
+          </li>
+        </ul>
+        <div class="note">
+          In plain words: \(r_\perp\) is “how far the spring’s pull line passes from the shoulder axis” (measured perpendicular to the line).
+          If the pull line passes through the shoulder axis, then \(r_\perp=0\) and the spring produces <b>no shoulder torque</b> (it only side-loads the joint).
+        </div>
+
+        <h3>Important: “L-shape over the shoulder axis” usually means \(r_\perp \approx 0\)</h3>
+        <p class="muted">
+          If, when the arm is horizontal, the spring physically bends over (or is guided over) the shoulder axis,
+          the segment that pulls on the upper arm is approximately along the line from the arm anchor to the shoulder axis.
+          That line passes through the axis, so the effective moment arm is ~0.
+        </p>
+        <p class="muted">
+          If you use a pulley/roller <i>near</i> the axis, then \(r_\perp\) becomes approximately the <b>pulley radius</b> (often only a few mm),
+          which forces you to use a very strong spring and increases joint side-loads.
+        </p>
+
+        <h3>Worked example from your described layout (straight-line case)</h3>
+        <p class="muted">
+          You described: shoulder axis is ~50&nbsp;mm above the base; base anchor is ~20&nbsp;mm behind the axis (\(x_B=-20\,\mathrm{mm}\))
+          and ~50&nbsp;mm below it (\(z_B=-50\,\mathrm{mm}\)).
+        </p>
+        <p class="muted">
+          You also said the spring length is ~100&nbsp;mm when the arm is up. In the “arm up” pose, \(\mathbf{p}_A=[0,a]^T\), so:
+        </p>
+        <p>
+          \[
+            100^2 \approx 20^2 + (a+50)^2\quad\Rightarrow\quad a \approx \sqrt{100^2-20^2}-50 \approx 48\,\mathrm{mm}
+          \]
+        </p>
+        <p class="muted">
+          With that geometry:
+        </p>
+        <ul class="muted">
+          <li>Arm up (\(\theta=0^\circ\)): \(r_\perp \approx 9.6\,\mathrm{mm}\)</li>
+          <li>Arm horizontal (\(\theta=90^\circ\)): \(r_\perp \approx 28.4\,\mathrm{mm}\)</li>
+        </ul>
+        <h3>Why this formula is valid (and how those numbers are computed)</h3>
+        <p class="muted">
+          In 2D, the torque magnitude about the origin from a force \(\mathbf{F}=F\hat{\mathbf{f}}\) applied at point \(\mathbf{p}_A\) is:
+        </p>
+        <p>
+          \[
+            \tau = \|\mathbf{p}_A \times \mathbf{F}\| = F\,\|\mathbf{p}_A \times \hat{\mathbf{f}}\|
+          \]
+        </p>
+        <p class="muted">
+          The quantity \(\|\mathbf{p}_A \times \hat{\mathbf{f}}\|\) is exactly the “lever arm” (perpendicular distance)
+          because it equals \( \|\mathbf{p}_A\| \sin\phi \), where \(\phi\) is the angle between the radius vector and the force direction.
+          That is why we can define:
+        </p>
+        <p>
+          \[
+            r_\perp = \|\mathbf{p}_A \times \hat{\mathbf{f}}\| = \left|\det(\mathbf{p}_A,\hat{\mathbf{f}})\right|
+          \]
+        </p>
+        <p class="muted">
+          With \(\mathbf{p}_A=[x_A,z_A]^T\) and \(\hat{\mathbf{f}}=[f_x,f_z]^T\), the 2D determinant is:
+        </p>
+        <p>
+          \[
+            \det(\mathbf{p}_A,\hat{\mathbf{f}})=x_A f_z - z_A f_x
+          \]
+        </p>
+
+        <h3>Numerical details for your geometry (straight-line spring only)</h3>
+        <p class="muted">
+          Use \(\mathbf{p}_B=[-20,-50]^T\,\mathrm{mm}\), \(a\approx 48\,\mathrm{mm}\).
+        </p>
+        <ul class="muted">
+          <li>
+            <b>Arm up</b> (\(\theta=0^\circ\)):
+            \(\mathbf{p}_A=[0,48]^T\).
+            Then \(\mathbf{p}_B-\mathbf{p}_A=[-20,-98]^T\) and
+            \(\hat{\mathbf{f}} \approx [-0.200,\,-0.980]^T\).
+            So:
+            \[
+              r_\perp \approx |0\cdot(-0.980) - 48\cdot(-0.200)| \approx 9.6\,\mathrm{mm}.
+            \]
+          </li>
+          <li>
+            <b>Arm horizontal</b> (\(\theta=90^\circ\)):
+            \(\mathbf{p}_A=[48,0]^T\).
+            Then \(\mathbf{p}_B-\mathbf{p}_A=[-68,-50]^T\) and
+            \(\hat{\mathbf{f}} \approx [-0.806,\,-0.592]^T\).
+            So:
+            \[
+              r_\perp \approx |48\cdot(-0.592) - 0\cdot(-0.806)| \approx 28.4\,\mathrm{mm}.
+            \]
+          </li>
+        </ul>
+        <div class="warnbox">
+          The \(28.4\,\mathrm{mm}\) value is for the <b>straight-line</b> spring (a single line from \(\mathbf{p}_A\) to \(\mathbf{p}_B\)).
+          If your spring is physically routed so it “bends” over the shoulder axis (two segments with a corner at the axis),
+          then the direction of force on the upper arm is along the segment from \(\mathbf{p}_A\) to the axis. That segment passes through the origin,
+          so \(r_\perp \approx 0\) (or \(\approx\) pulley radius if you use a roller).
+        </div>
+        <div class="note">
+          If you change where the arm-side anchor sits (change \(a\)) or move the base anchor, recompute \(r_\perp\) with the formula above.
+          In practice, increasing \(r_\perp\) (better leverage) is often more effective than buying a stiffer spring.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>4) Step C — compute the needed spring force at horizontal</h2>
+        <p class="muted">
+          Decide what fraction \(\alpha\) of gravity torque you want to cancel (start with \(\alpha=0.5\) to \(0.8\)):
+        </p>
+        <p>
+          \[
+            \tau_{target} = \alpha\,\tau_g
+          \]
+        </p>
+        <p class="muted">
+          Required spring force near horizontal:
+        </p>
+        <p>
+          \[
+            F_h \approx \frac{\tau_{target}}{r_\perp}
+          \]
+        </p>
+        <h3>Numerical example (if \(r_\perp \approx 100\,\mathrm{mm} = 0.10\,\mathrm{m}\))</h3>
+        <ul class="muted">
+          <li>\(\tau_g \approx 0.981\,\mathrm{N\cdot m}\)</li>
+          <li>For \(\alpha=0.7\): \(\tau_{target}\approx 0.687\,\mathrm{N\cdot m}\)</li>
+          <li>\(F_h \approx 0.687/0.10 \approx 6.9\,\mathrm{N}\) (about 0.70&nbsp;kgf)</li>
+        </ul>
+        <div class="note">
+          If your actual \(r_\perp\) is smaller (e.g. 50&nbsp;mm), you need roughly 2× the force and roughly 2× the spring stiffness.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>5) Step D — pick preload and spring constant \(k\) from \(\Delta x\)</h2>
+        <p class="muted">
+          In your simplified model, spring extension changes by \(\Delta x = 10\,\mathrm{mm}\) from “up” to “horizontal”.
+          Model the force as:
+        </p>
+        <p>
+          \[
+            F = F_u + k\,\Delta x
+          \]
+        </p>
+        <p class="muted">
+          where:
+        </p>
+        <ul class="muted">
+          <li>\(F_u\): force in the “up” pose (installed preload / initial tension you still have when the arm is up).</li>
+          <li>\(F_h\): force in the “horizontal” pose.</li>
+        </ul>
+        <p class="muted">
+          So:
+        </p>
+        <p>
+          \[
+            k \approx \frac{F_h - F_u}{\Delta x}
+          \]
+        </p>
+        <h3>Example numbers (continuing the \(r_\perp=100\,\mathrm{mm}\), \(\alpha=0.7\) example)</h3>
+        <ul class="muted">
+          <li>Target \(F_h \approx 6.9\,\mathrm{N}\)</li>
+          <li>Choose a modest preload \(F_u \approx 2\,\mathrm{N}\) (keeps it taut, but doesn’t yank upward too much)</li>
+          <li>\(\Delta x = 10\,\mathrm{mm}\)</li>
+          <li>\(k \approx (6.9 - 2)/10 \approx 0.49\,\mathrm{N/mm}\)</li>
+        </ul>
+        <div class="warnbox">
+          Make sure the spring’s allowed extension/load is not exceeded at maximum reach.
+          If the spring goes near coil-bind or near its max rated extension, it will fatigue quickly or permanently deform.
+        </div>
+
+        <h3>Example: using an idler/pulley so horizontal \(r_\perp \approx 10\text{–}15\,\mathrm{mm}\)</h3>
+        <p class="muted">
+          This is the “spring routed around the shoulder” case where you add a roller/pulley to avoid the line of action passing through the shoulder axis.
+          If the idler geometry only gives you a small effective lever arm (say \(r_\perp \approx 10\text{–}15\,\mathrm{mm}\)) at the horizontal pose,
+          then the spring must generate a much larger force to produce the same counterbalance torque.
+        </p>
+        <p class="muted">
+          Use the same simplified load numbers as above:
+          \(m=0.5\,\mathrm{kg}\), \(L=0.200\,\mathrm{m}\Rightarrow \tau_g\approx 0.981\,\mathrm{N\cdot m}\).
+          Choose a target compensation fraction \(\alpha\) (start with \(\alpha=0.7\)).
+        </p>
+        <p>
+          \[
+            \tau_{target}=\alpha\tau_g \approx 0.7\cdot 0.981 \approx 0.687\ \mathrm{N\cdot m}
+          \]
+        </p>
+        <p class="muted">
+          Required spring force at horizontal is:
+        </p>
+        <p>
+          \[
+            F_h \approx \frac{\tau_{target}}{r_\perp}
+          \]
+        </p>
+        <ul class="muted">
+          <li>
+            If \(r_\perp = 10\,\mathrm{mm}=0.010\,\mathrm{m}\):
+            \[
+              F_h \approx 0.687/0.010 \approx 68.7\,\mathrm{N}\ \ (\approx 7.0\,\mathrm{kgf})
+            \]
+          </li>
+          <li>
+            If \(r_\perp = 15\,\mathrm{mm}=0.015\,\mathrm{m}\):
+            \[
+              F_h \approx 0.687/0.015 \approx 45.8\,\mathrm{N}\ \ (\approx 4.7\,\mathrm{kgf})
+            \]
+          </li>
+        </ul>
+        <div class="warnbox">
+          These forces are large for small brackets/printed parts and will create large side loads and wear.
+          Mechanically, this is why “idler at the axis” (or very close to it) often performs poorly: the lever arm is too small.
+        </div>
+        <p class="muted">
+          Now relate those forces to a spring spec. If the spring extension change between “up” and “horizontal” is still
+          \(\Delta x = 10\,\mathrm{mm}\), and you choose an “up pose” preload \(F_u\), then:
+        </p>
+        <p>
+          \[
+            k \approx \frac{F_h - F_u}{\Delta x}
+          \]
+        </p>
+        <p class="muted">
+          Example (pick a moderate preload just to keep tension, \(F_u=10\,\mathrm{N}\)):
+        </p>
+        <ul class="muted">
+          <li>
+            For \(r_\perp=10\,\mathrm{mm}\): \(k \approx (68.7-10)/10 \approx 5.87\,\mathrm{N/mm}\)
+          </li>
+          <li>
+            For \(r_\perp=15\,\mathrm{mm}\): \(k \approx (45.8-10)/10 \approx 3.58\,\mathrm{N/mm}\)
+          </li>
+        </ul>
+        <div class="note">
+          Practical takeaway: if you can only achieve \(r_\perp\approx 10\text{–}15\,\mathrm{mm}\) at horizontal,
+          you will likely need a spring in the “tens of newtons” force range (multi‑kgf).
+          If that’s too aggressive, the usual fix is not “different \(k\)”, but <b>different geometry</b>:
+          move the idler further off-axis (increase \(r_\perp\)), or use a drum/cable or torsion spring on the shoulder axis.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>6) What spring specs to look for (practical shopping list)</h2>
+        <ul class="muted">
+          <li><b>Spring rate</b> \(k\) (N/mm): how much force increases per mm of stretch.</li>
+          <li><b>Initial tension</b> (N), if provided: built-in preload for extension springs.</li>
+          <li><b>Free length</b> \(L_0\) (mm): unloaded length. Installed preload comes from mounting it at a longer distance than \(L_0\).</li>
+          <li><b>Maximum recommended extension</b> (mm) and/or <b>maximum load</b> (N).</li>
+          <li><b>End hooks / mounting style</b>: avoid sharp bending; use smooth pins/eyelets to reduce fatigue.</li>
+        </ul>
+        <div class="note">
+          If the math feels fuzzy, prototype with elastic bands and a luggage/fish scale first.
+          Once you know the approximate force needed at “up” and “horizontal”, choosing \(k\) becomes much easier.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>7) Minimum parameters required to pick \(k\) (in this simplified model)</h2>
+        <p class="muted">
+          From your numbers, \(\Delta x\) alone is not enough.
+          To pick \(k\), you need:
+        </p>
+        <ul class="muted">
+          <li>\(m\) (kg) and \(L\) (m) to compute \(\tau_g\).</li>
+          <li>\(r_\perp\) (m) near the pose you care about (moment arm of the spring about the shoulder).</li>
+          <li>Target compensation fraction \(\alpha\) (e.g., 0.5–0.8).</li>
+          <li>Desired preload \(F_u\) (N) in the “up” pose.</li>
+          <li>\(\Delta x\) (mm) between “up” and “horizontal” to convert force difference into \(k\).</li>
+        </ul>
+      </div>
+
+      <footer>
+        File: <code>docs/IK/spring_selection.html</code>
+      </footer>
+    </div>
+  </body>
+</html>
+

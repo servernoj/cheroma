@@ -331,8 +331,8 @@ const pathPlanner = (from, to, includeTo = true, options) => {
 const toPoint = async (toPosition, via = [], options) => {
   const {
     relax: doRelax = true,
-    dtMs = 20,
-    vMaxDegPerSec = 60,
+    dtMs = 30,
+    vMaxDegPerSec = 45,
   } = options ?? {}
 
   const { points } = [...via, toPosition].reduce(
@@ -352,10 +352,6 @@ const toPoint = async (toPosition, via = [], options) => {
       points: []
     }
   )
-
-  // Enforce cadence with a "no catch-up bursts" schedule based on performance.now().
-  // We aim for one step per dtMs. If a step runs late, we reset the schedule instead
-  // of trying to fire multiple steps back-to-back (which looks jerky on servos).
   let nextTick = performance.now() + dtMs
   for (let k = 0; k < points.length; k += 1) {
     const point = points[k]
