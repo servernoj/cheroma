@@ -19,10 +19,6 @@ declare global {
   }
   type Raw3D = Array<number>
   // --
-  type ServoCorrection = {
-    gain: number
-    offset: number
-  }
   type ServoCalPoint = [number, number]
   type ServoName = keyof typeof config['servos']
   type ServoData = {
@@ -40,6 +36,12 @@ declare global {
   type GeomData = {
     [name in GeomName]: number
   }
+  type Fitting = {
+    roll: number
+    pitch: number
+    yaw: number
+    t: Array<number>
+  }
   type Config = {
     units: {
       pulse: 'us'
@@ -48,6 +50,7 @@ declare global {
     }
     servos: ServoData
     geom: GeomData
+    fitting: Fitting
   }
 }
 

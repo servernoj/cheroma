@@ -1,5 +1,11 @@
 {
   "units": { "pulse": "us", "angle": "deg", "length": "mm" },
+  "fitting": {
+    "roll": 0.4393,
+    "pitch": -6.0044,
+    "yaw": 0.1423,
+    "t": [54.8576, 1.8742, -12.8382]
+  },
   "servos": {
     "base": {
       "channel": 0,
@@ -9,11 +15,7 @@
         [90.0, 2230]
       ],
       "home": 0,
-      "kinematics": "q0",
-      "correction": {
-        "gain": 1,
-        "offset": 0
-      }
+      "kinematics": "q0"      
     },
     "shoulder": {
       "channel": 1,
@@ -23,11 +25,7 @@
         [90.0, 880]
       ],
       "home": 0,
-      "kinematics": "q1",
-      "correction": {
-        "gain": 1,
-        "offset": 0
-      }
+      "kinematics": "q1"      
     },
     "elbow": {
       "channel": 2,
@@ -37,11 +35,7 @@
         [180.0, 2390]
       ],
       "home": 90,
-      "kinematics": "q2",
-      "correction": {
-        "gain": 1,
-        "offset": 0
-      }
+      "kinematics": "q2"      
     },
     "wrist": {
       "channel": 3,
@@ -51,11 +45,7 @@
         [90.0, 2550]
       ],
       "home": 90,
-      "kinematics": "q3",
-      "correction": {
-        "gain": 1,
-        "offset": 0
-      }
+      "kinematics": "q3"      
     },
     "spinner": {
       "channel": 4,
@@ -65,11 +55,7 @@
         [90.0, 2560]
       ],
       "home": 0,
-      "kinematics": "q4",
-      "correction": {
-        "gain": 1,
-        "offset": 0
-      }
+      "kinematics": "q4"
     }
   },
   "geom": {
@@ -77,7 +63,7 @@
     "L1": 211,
     "L2": 265,
     "L3": 50,
-    "dX": 24,
+    "dX": 20,
     "dU": 0,
     "dV": -10,
     "La": 163,

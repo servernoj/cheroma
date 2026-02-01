@@ -1,4 +1,5 @@
 import config from '@/config.json' with {type: 'json'}
+import { mMult, mTrans, mOp } from '@/modules/utils.js'
 
 const k2s = Object.entries(config.servos).reduce(
   (acc, [servoName, { kinematics }]) => {
@@ -7,6 +8,43 @@ const k2s = Object.entries(config.servos).reduce(
   },
   {}
 )
+
+/**
+ * @param {KinematicsOutput} P 
+ * @returns {KinematicsOutput}
+ */
+const toModel = P => {
+  const { roll, pitch, yaw, t } = config.fitting
+  const cr = Math.cos(d2r(roll))
+  const sr = Math.sin(d2r(roll))
+  const cp = Math.cos(d2r(pitch))
+  const sp = Math.sin(d2r(pitch))
+  const cy = Math.cos(d2r(yaw))
+  const sy = Math.sin(d2r(yaw))
+  const Rx = [[1, 0, 0], [0, cr, -sr], [0, sr, cr]]
+  const Ry = [[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]]
+  const Rz = [[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]]
+  const R = mMult(Rz, mMult(Ry, Rx))
+  const P_ =
+    mMult(
+      mTrans(R),
+      mTrans(
+        mOp(
+          [[P.x, P.y, P.z]],
+          [t],
+          (a, b) => a - b
+        )
+      )
+    )
+  return ['x', 'y', 'z'].reduce(
+    /** * @param {*} acc */
+    (acc, key, idx) => {
+      acc[key] = P_[idx][0]
+      return acc
+    },
+    {}
+  )
+}
 
 /**
  * @param {KinematicsInput} K 
@@ -180,4 +218,4 @@ const IK = ({ x, y, z }, gamma = 180) => {
   return Q
 }
 
-export { FK, IK, K2S }
+export { FK, IK, K2S, toModel }

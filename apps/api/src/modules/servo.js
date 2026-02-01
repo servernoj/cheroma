@@ -52,15 +52,13 @@ const interp = (angle, begin, end) => {
  * @param {number} angleDeg angle to convert to pulse width
  * @param {{
  *   sortedPoints: Array<ServoCalPoint>
- *   correction: ServoCorrection
  *   clamp?: boolean
  * }} options
  */
-const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, correction, clamp = true }) => {
+const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, clamp = true }) => {
   if (!Array.isArray(sortedPoints) || sortedPoints.length < 2) {
     throw new Error('sortedPoints must have at least 2 [angleDeg, pulseUs] points')
   }
-  angleDeg = (angleDeg - correction.offset) / correction.gain
   const n = sortedPoints.length
   // Handle left/right of table
   if (angleDeg <= sortedPoints[0][0]) {
@@ -92,7 +90,7 @@ const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, correction, clamp = true
 
 const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
   const closure = Object.entries(config.servos).reduce(
-    (acc, [servoName, { calPoints, correction }]) => {
+    (acc, [servoName, { calPoints }]) => {
       const sortedPoints = calPoints.slice().sort(
         (a, b) => a[0] - b[0]
       )
@@ -100,7 +98,6 @@ const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
         acc[servoName] = {}
       }
       acc[servoName].sortedPoints = sortedPoints
-      acc[servoName].correction = correction
       return acc
     },
     {}
@@ -331,7 +328,7 @@ const pathPlanner = (from, to, includeTo = true, options) => {
 const toPoint = async (toPosition, via = [], options) => {
   const {
     relax: doRelax = true,
-    dtMs = 30,
+    dtMs = 20,
     vMaxDegPerSec = 45,
   } = options ?? {}
 
