@@ -21,7 +21,15 @@ router.post(
   async (req, res) => {
     const { to } = res.locals.parsed.body
     const target = IK(toModel(to))
-    await servo.toPoint(K2S(target), [], { relax: true })
+    const preTarget = IK(
+      toModel({
+        ...to,
+        z: to.z + 50
+      })
+    )
+    await servo.toPoint(K2S(preTarget), [], { relax: false })
+    await sleep(2000)
+    await servo.toPoint(K2S(target), [], { relax: true, vMaxDegPerSec: 20 })
     res.sendStatus(200)
   }
 )
@@ -58,7 +66,7 @@ router.post(
     console.log(Object.values(target).slice(0, 4).map(p => Math.round(p * 100) / 100))
     await servo.toPoint(K2S(preTarget), [
       ...via,
-    ], { relax: false, vMaxDegPerSec: 30 })
+    ], { relax: false })
     await sleep(2000)
     await servo.toPoint(K2S(target), [], { relax: true, vMaxDegPerSec: 20 })
     res.sendStatus(200)

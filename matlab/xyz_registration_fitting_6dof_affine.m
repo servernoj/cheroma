@@ -1,14 +1,23 @@
-function out = xyz_registration_fitting_6dof(Qcmd, Xmeas, gamma)
-%XYZ_REGISTRATION_FITTING_6DOF Fit a full 3D rigid transform (no a/b).
+function out = xyz_registration_fitting_6dof_affine(Qcmd, Xmeas, gamma)
+%XYZ_REGISTRATION_FITTING_6DOF_AFFINE Fit a full 3D rigid transform + per-axis affine corrections (no a/b).
 %
 % Model:
-%   Xmeas ≈ R(roll,pitch,yaw) * Xpred + t
+%   Xmeas ≈ R(roll,pitch,yaw) * U(Xpred; sx,ox, sy,oy, oz) + t
+%
+% This matches a runtime "toModel" mapping of the form:
+%   u = R^T * (X_meas - t)
+%   x_model = sx*u_x + ox
+%   y_model = sy*u_y + oy
+%   z_model = u_z + oz
 %
 % Params:
 %   roll  about +X (deg)
 %   pitch about +Y (deg)
 %   yaw   about +Z (deg)
 %   t = [tx;ty;tz] (mm)
+%   sx, ox: x scale (dimensionless) + x offset (mm) in model frame after undoing R,t
+%   sy, oy: y scale (dimensionless) + y offset (mm) in model frame after undoing R,t
+%   oz    : z offset (mm) in model frame after undoing R,t
 %
 % Inputs:
 %   Qcmd  : N×4 (deg) [q0,q1,q2,q3]  (as logged)
@@ -17,11 +26,8 @@ function out = xyz_registration_fitting_6dof(Qcmd, Xmeas, gamma)
 %
 % Output:
 %   out.roll, out.pitch, out.yaw, out.t
+%   out.sx, out.ox, out.sy, out.oy, out.oz
 %   out.resnorm, out.rmse, out.rmse_xyz
-%
-% Notes:
-%   If you want to also fit per-axis affine terms (sx/ox, sy/oy, oz),
-%   use xyz_registration_fitting_6dof_affine.m instead.
 %
   if nargin < 3
     gamma = [];
@@ -29,31 +35,42 @@ function out = xyz_registration_fitting_6dof(Qcmd, Xmeas, gamma)
 
   opts = optimoptions('lsqnonlin', 'Display', 'iter', 'MaxFunctionEvaluations', 1e5);
 
-  % Params: [roll; pitch; yaw; tx; ty; tz]
-  P0 = [0; 0; 0; 0; 0; 0];
+  % Params:
+  %   [roll; pitch; yaw; tx; ty; tz; sx; ox; sy; oy; oz]
+  P0 = [0; 0; 0; 0; 0; 0; 1; 0; 1; 0; 0];
 
-  % Keep angles modest; translations wide.
-  lb = [-10; -10; -15; -2000; -2000; -2000];
-  ub = [ 10;  10;  15;  2000;  2000;  2000];
+  % Keep angles modest; translations wide; scales near 1; offsets moderate.
+  lb = [-10; -10; -15; -2000; -2000; -2000; 0.90; -200; 0.90; -200; -200];
+  ub = [ 10;  10;  15;  2000;  2000;  2000; 1.10;  200; 1.10;  200;  200];
 
-  P_star = lsqnonlin(@(P)residual_xyz_reg6(P, Qcmd, Xmeas, gamma), P0, lb, ub, opts);
+  P_star = lsqnonlin(@(P)residual_xyz_reg_affine(P, Qcmd, Xmeas, gamma), P0, lb, ub, opts);
 
   out.roll = P_star(1);
   out.pitch = P_star(2);
   out.yaw = P_star(3);
   out.t = P_star(4:6);
+  out.sx = P_star(7);
+  out.ox = P_star(8);
+  out.sy = P_star(9);
+  out.oy = P_star(10);
+  out.oz = P_star(11);
 
-  r = residual_xyz_reg6(P_star, Qcmd, Xmeas, gamma);
+  r = residual_xyz_reg_affine(P_star, Qcmd, Xmeas, gamma);
   out.resnorm = sum(r.^2);
   out.rmse = sqrt(out.resnorm / numel(r));
   out.rmse_xyz = rmse_xyz_from_r(r);
 end
 
-function r = residual_xyz_reg6(P, Qcmd, Xmeas, gamma)
+function r = residual_xyz_reg_affine(P, Qcmd, Xmeas, gamma)
   roll = P(1);
   pitch = P(2);
   yaw = P(3);
   t = P(4:6);
+  sxScale = P(7);
+  ox = P(8);
+  syScale = P(9);
+  oy = P(10);
+  oz = P(11);
 
   % R = Rz(yaw) * Ry(pitch) * Rx(roll)
   cr = cosd(roll);  sr = sind(roll);
@@ -79,7 +96,13 @@ function r = residual_xyz_reg6(P, Qcmd, Xmeas, gamma)
     end
 
     Xpred = FK([q0; q1; q2; q3]); % model frame
-    Xpred = R * Xpred + t;        % predicted in measurement frame
+
+    % Undo the "toModel" affine (sx/ox, sy/oy, oz) to predict measurement frame:
+    %   u_x = (x_model - ox)/sx
+    %   u_y = (y_model - oy)/sy
+    %   u_z = (z_model - oz)
+    Xu = [(Xpred(1) - ox)/sxScale; (Xpred(2) - oy)/syScale; (Xpred(3) - oz)];
+    Xpred = R * Xu + t;
 
     ri = [ ...
             Xpred(1) - Xmeas(i, 1); ...

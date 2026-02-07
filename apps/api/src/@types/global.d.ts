@@ -42,6 +42,12 @@ declare global {
     yaw: number
     t: Array<number>
   }
+  type Board = {
+    gripperChannel: number
+    open: number
+    close: number
+    basket: KinematicsOutput
+  }
   type Config = {
     units: {
       pulse: 'us'
@@ -51,6 +57,7 @@ declare global {
     servos: ServoData
     geom: GeomData
     fitting: Fitting
+    board: Board
   }
 }
 
