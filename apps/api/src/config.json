@@ -1,10 +1,10 @@
 {
   "units": { "pulse": "us", "angle": "deg", "length": "mm" },
   "fitting": {
-    "roll": 0.4393,
-    "pitch": -6.0044,
-    "yaw": 0.1423,
-    "t": [60, 1.8742, -12.8382]
+    "roll": 0,
+    "pitch": 0,
+    "yaw": 0,
+    "t": [0, 0, 0]
   },
   "servos": {
     "base": {
@@ -46,22 +46,12 @@
       ],
       "home": 90,
       "kinematics": "q3"      
-    },
-    "spinner": {
-      "channel": 4,
-      "calPoints": [
-        [-90.0, 600],
-        [0.0, 1590],
-        [90.0, 2560]
-      ],
-      "home": 0,
-      "kinematics": "q4"
-    }    
+    }
   },
   "board": {
-    "gripperChannel": 5,
-    "open": 2050,
-    "close": 2300,
+    "grabberChannel": 4,
+    "grab": 3000,
+    "release": 0,
     "basket": {
       "x": 100,
       "y": 200,
@@ -73,10 +63,6 @@
     "L1": 211,
     "L2": 265,
     "L3": 50,
-    "dX": 20,
-    "dU": 0,
-    "dV": -10,
-    "La": 163,
-    "R": 27
+    "dX": 20    
   }
 }

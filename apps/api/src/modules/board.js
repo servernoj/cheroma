@@ -2,17 +2,17 @@ import * as servo from '@/modules/servo.js'
 import { IK, toModel, K2S, } from '@/modules/kinematics.js'
 import config from '@/config.json' with {type: 'json'}
 
-const open = async () => {
+const release = async () => {
   await servo.setChannel({
-    channel: config.board.gripperChannel,
-    pulseWidthUs: config.board.open
+    channel: config.board.grabberChannel,
+    pulseWidthUs: config.board.release
   })
 }
 
-const close = async () => {
+const grab = async () => {
   await servo.setChannel({
-    channel: config.board.gripperChannel,
-    pulseWidthUs: config.board.close
+    channel: config.board.grabberChannel,
+    pulseWidthUs: config.board.grab
   })
 }
 
@@ -28,11 +28,11 @@ const drop = async () => {
       K2S(IK(toModel(preTarget)))
     ]
   )
-  await open()
+  await release()
 }
 
 export {
-  open,
-  close,
+  grab,
+  release,
   drop
 }

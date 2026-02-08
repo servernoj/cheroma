@@ -1,46 +1,39 @@
 function out = kinematics()
 
-  geom.R = 27;
-  geom.La = 95 + 68;
-  geom.dU = 0; % x- at q0=0
-  geom.dV = -10; % y+ at q0=0
-  geom.dX = 20;
   geom.H = 130;
   geom.L1 = 211;
   geom.L2 = 265;
   geom.L3 = 50;
+  geom.dX = 20;
   H = sym('H');
   L1 = sym('L1');
   L2 = sym('L2');
   L3 = sym('L3');
-  La = sym('La');
-  R = sym('R');
-  dU = sym('dU');
-  dV = sym('dV');
   dX = sym('dX');
   q0 = sym('q0');
   q1 = sym('q1');
   q2 = sym('q2');
   q3 = sym('q3');
-  q4 = sym('q4');
 
   % FK
-  Gamma = q1 + q2 + q3
+  Gamma = q1 + q2 + q3;
   r = dX * cos(q1) + L1 * sin(q1) + L2 * sin(q1 + q2) + L3 * sin(Gamma);
-  t = [sin(Gamma) * cos(q0); sin(Gamma) * sin(q0); cos(Gamma)];
-  v = [-sin(q0); cos(q0); 0];
-  u = [cos(q0) * cos(Gamma); sin(q0) * cos(Gamma); -sin(Gamma)];
-  Pref = [
+  Ptcp = [
           r * cos(q0);
           r * sin(q0);
           H - dX * sin(q1) + L1 * cos(q1) + L2 * cos(q1 + q2) + L3 * cos(Gamma)
           ];
-  Pspin = dU * u + dV * v;
-  Pecc = R * (cos(q4) * u + sin(q4) * v);
-  Delta = Pspin + Pecc + La * t;
-  Ptcp = Pref + Delta;
 
-  function Q = IK0(P, Gamma_)
+  function P = FK(Q)
+    % Q: 4 x 1
+    % P: 3 x 1
+    P = double( ...
+      subs(Ptcp, {q0, q1, q2, q3, H, L1, L2, L3, dX}, {Q(1), Q(2), Q(3), Q(4), geom.H, geom.L1, geom.L2, geom.L3, geom.dX}) ...
+    );
+  end
+
+  % IK
+  function Q = IK(P, Gamma_)
     x = P(1);
     y = P(2);
     z = P(3);
@@ -48,21 +41,42 @@ function out = kinematics()
     r = hypot(x, y);
     rw = r - geom.L3 * sin(Gamma_);
     zw = (z - geom.H) - geom.L3 * cos(Gamma_);
-    D = (rw ^ 2 + zw ^ 2 - geom.L1 ^ 2 - geom.L2 ^ 2) / (2 * geom.L1 * geom.L2);
+
+    % --- Stage 1 (analytic seed), but INCLUDING dX ---
+    %
+    % The shoulder→elbow vector at q1=0 is [dX; L1] in the (r,z) plane.
+    % This is equivalent to a link of length L1p rotated by an offset alpha:
+    %   L1p = hypot(L1, dX),  alpha = atan2(dX, L1)
+    % If we define:
+    %   theta1 = q1 + alpha
+    %   theta2 = q2 - alpha
+    % then the wrist-point equations become the standard 2-link form:
+    %   rw = L1p*sin(theta1) + L2*sin(theta1+theta2)
+    %   zw = L1p*cos(theta1) + L2*cos(theta1+theta2)
+    % We can solve analytically for (theta1,theta2) and then recover (q1,q2).
+    L1p = hypot(geom.L1, geom.dX);
+    alpha = atan2(geom.dX, geom.L1);
+
+    D = (rw ^ 2 + zw ^ 2 - L1p ^ 2 - geom.L2 ^ 2) / (2 * L1p * geom.L2);
 
     if (abs(D) > 1)
-      error('IK0:NoSolution', 'Point unreachable');
+      error('IK:NoSolution', 'Point unreachable (D=%g)', D);
     end
 
     s = sqrt(1 - D ^ 2);
-    q2_ = [atan2(+s, D); atan2(-s, D)];
-    A = geom.L1 + geom.L2 * cos(q2_);
-    B = geom.L2 * sin(q2_);
-    q1_ = atan2(A * rw - B * zw, B * rw + A * zw);
-    z_elbow = geom.H + geom.L1 * cos(q1_);
+    theta2 = [atan2(+s, D); atan2(-s, D)];
+    A = L1p + geom.L2 * cos(theta2);
+    B = geom.L2 * sin(theta2);
+    theta1 = atan2(A * rw - B * zw, B * rw + A * zw);
+
+    q1_c = theta1 - alpha;
+    q2_c = theta2 + alpha;
+
+    % Choose elbow-up branch by higher elbow Z in the REAL dX model.
+    z_elbow = geom.H - geom.dX * sin(q1_c) + geom.L1 * cos(q1_c);
     [~, idx] = max(z_elbow);
-    q1_ = q1_(idx);
-    q2_ = q2_(idx);
+    q1_ = q1_c(idx);
+    q2_ = q2_c(idx);
 
     % numerical tunning
     for i = 1:100
@@ -84,64 +98,10 @@ function out = kinematics()
     end
 
     q3_ = Gamma_ - q1_ - q2_;
-    Q = [q0_; q1_; q2_; q3_; q4_(q0_)];
-  end
-
-  function out = q4_(q0_)
-    out = q0_;
-  end
-
-  % IK
-  function [QQ, found] = IK(P, Gamma_)
-    x = P(1);
-    y = P(2);
-    q0_ = atan2(y, x);
-    Q = [q0_; 0; 0; 0; q4_(q0_)];
-    eps = 1e-2;
-    found = false;
-    subsList = {q0, q1, q2, q3, q4, H, L1, L2, L3, La, dX, dU, dV, R};
-
-    for i = 1:100
-      delta = double(subs( ...
-        Delta, ...
-        subsList, ...
-        {Q(1), Q(2), Q(3), Q(4), Q(5), geom.H, geom.L1, geom.L2, geom.L3, geom.La, geom.dX, geom.dU, geom.dV, geom.R} ...
-      ));
-
-      try
-        Q = IK0(P - delta, Gamma_);
-      catch ME
-
-        if strcmp(ME.identifier, 'IK0:NoSolution')
-          Q = [];
-          warning(ME.identifier, '%s', ME.message);
-          break;
-        end
-
-      end
-
-      P_ = double(subs( ...
-        Ptcp, ...
-        subsList, ...
-        {Q(1), Q(2), Q(3), Q(4), Q(5), geom.H, geom.L1, geom.L2, geom.L3, geom.La, geom.dX, geom.dU, geom.dV, geom.R} ...
-      ));
-
-      if (norm(P - P_) < eps)
-        found = true;
-        break;
-      end
-
-    end
-
-    if (found)
-      QQ = toDegrees('radians', Q);
-    else
-      QQ = [];
-    end
-
+    Q = [q0_; q1_; q2_; q3_];
   end
 
   out.IK = @IK;
-  out.geom = geom;
+  out.FK = @FK;
 
 end

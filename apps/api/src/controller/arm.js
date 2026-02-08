@@ -47,8 +47,7 @@ router.post(
         base: z.number(),
         shoulder: z.number(),
         elbow: z.number(),
-        wrist: z.number(),
-        spinner: z.number()
+        wrist: z.number()
       }).array().min(0).optional()
     })
   }),

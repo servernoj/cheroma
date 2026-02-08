@@ -63,10 +63,10 @@ const d2r = d => d * Math.PI / 180
  * Forward kinematics helper
  * @param {KinematicsInput} args
  * @param {number} [gamma]
- * @returns {{p: Raw3D, delta: Raw3D}}
+ * @returns {{p: Raw3D}}
  */
-const FK_ = ({ q0, q1, q2, q3, q4 }, gamma) => {
-  const { L1, L2, L3, H, dX, dU, dV, La, R } = config.geom
+const FK_ = ({ q0, q1, q2, q3 }, gamma) => {
+  const { L1, L2, L3, H, dX } = config.geom
   gamma = gamma ?? q1 + q2 + q3
   const r = (
     dX * Math.cos(d2r(q1)) +
@@ -94,15 +94,7 @@ const FK_ = ({ q0, q1, q2, q3, q4 }, gamma) => {
     r * Math.sin(d2r(q0)),
     H - dX * Math.sin(d2r(q1)) + L1 * Math.cos(d2r(q1)) + L2 * Math.cos(d2r(q1 + q2)) + L3 * Math.cos(d2r(gamma))
   ]
-  const delta = Array(3).fill().map(
-    (_, idx) => {
-      const spin = dU * u[idx] + dV * v[idx]
-      const ecc = R * (Math.cos(d2r(q4)) * u[idx] + Math.sin(d2r(q4)) * v[idx])
-      const up = La * t[idx]
-      return spin + ecc + up
-    }
-  )
-  return { p, delta }
+  return { p }
 }
 
 /**
@@ -111,72 +103,84 @@ const FK_ = ({ q0, q1, q2, q3, q4 }, gamma) => {
  * @returns {KinematicsOutput}
  */
 const FK = (Q) => {
-  const { p, delta } = FK_(Q)
+  const { p } = FK_(Q)
   const mapping = ['x', 'y', 'z']
   return mapping.reduce(
     /** @param {*} acc  */
     (acc, label, idx) => {
-      acc[label] = p[idx] + delta[idx]
+      acc[label] = p[idx]
       return acc
     },
     {}
   )
 }
 
-const q4 = q0 => q0
-
-
 /**
- * Inverse kinematics helper
+ * Inverse kinematics
  * @param {KinematicsOutput} args
- * @param {number} gamma
+ * @param {{
+ *   tunning: boolean
+ *   gamma: number
+ * }} [options]
  * @returns {KinematicsInput}
  */
-const IK_ = ({ x, y, z }, gamma) => {
+const IK = ({ x, y, z }, options) => {
+  const {
+    tunning = false,
+    gamma = 180
+  } = options ?? {}
   const { L1, L2, L3, H, dX } = config.geom
   const q0 = Math.atan2(y, x)
   const r = Math.hypot(x, y)
   const rw = r - L3 * Math.sin(d2r(gamma))
   const zw = z - H - L3 * Math.cos(d2r(gamma))
-  // -- Initial guess assuming dX = 0
-  const D = (rw * rw + zw * zw - L1 * L1 - L2 * L2) / (2 * L1 * L2)
+  // L1p = hypot(L1, dX), alpha = atan2(dX, L1)
+  // theta1 = q1 + alpha, theta2 = q2 - alpha
+  // Standard 2-link solve for (theta1,theta2), then recover (q1,q2).
+  const L1p = Math.hypot(L1, dX)
+  const alpha = Math.atan2(dX, L1)
+  const D = (rw * rw + zw * zw - L1p * L1p - L2 * L2) / (2 * L1p * L2)
   if (Math.abs(D) > 1) {
     throw new Error('Position unreachable')
   }
   const s = Math.sqrt(1 - D * D)
-  const q2_r = [
+  const theta2_r = [
     Math.atan2(+s, D),
     Math.atan2(-s, D)
   ]
-  const q1_r = q2_r.map(
-    q2 => {
-      const A = L1 + L2 * Math.cos(q2)
-      const B = L2 * Math.sin(q2)
+  const theta1_r = theta2_r.map(
+    theta2 => {
+      const A = L1p + L2 * Math.cos(theta2)
+      const B = L2 * Math.sin(theta2)
       return Math.atan2(A * rw - B * zw, B * rw + A * zw)
     }
   )
+  const q1_r = theta1_r.map(theta1 => theta1 - alpha)
+  const q2_r = theta2_r.map(theta2 => theta2 + alpha)
   const z_elbow = q1_r.map(
-    q1 => H + L1 * Math.cos(q1)
+    q1 => H - dX * Math.sin(q1) + L1 * Math.cos(q1)
   )
   const idx = z_elbow[0] > z_elbow[1] ? 0 : 1
   let [q1, q2] = [q1_r[idx], q2_r[idx]]
-  const epsilon = 1e-4
-  // -- Numerical solution by Newton method for actual dX
-  for (let i = 0; i < 100; i++) {
-    const fr = dX * Math.cos(q1) + L1 * Math.sin(q1) + L2 * Math.sin(q1 + q2) - rw
-    const fz = -dX * Math.sin(q1) + L1 * Math.cos(q1) + L2 * Math.cos(q1 + q2) - zw
-    const error = Math.hypot(fr, fz)
-    if (error < epsilon) {
-      break
+  if (tunning) {
+    const epsilon = 1e-4
+    // -- Numerical refinement by Newton method (keep for robustness)
+    for (let i = 0; i < 100; i++) {
+      const fr = dX * Math.cos(q1) + L1 * Math.sin(q1) + L2 * Math.sin(q1 + q2) - rw
+      const fz = -dX * Math.sin(q1) + L1 * Math.cos(q1) + L2 * Math.cos(q1 + q2) - zw
+      const error = Math.hypot(fr, fz)
+      if (error < epsilon) {
+        break
+      }
+      // Jacobian J = df/d[q1,q2]
+      const J11 = -dX * Math.sin(q1) + L1 * Math.cos(q1) + L2 * Math.cos(q1 + q2)
+      const J12 = L2 * Math.cos(q1 + q2)
+      const J21 = -dX * Math.cos(q1) - L1 * Math.sin(q1) - L2 * Math.sin(q1 + q2)
+      const J22 = -L2 * Math.sin(q1 + q2)
+      const det = J11 * J22 - J12 * J21
+      q1 += - (J22 * fr - J12 * fz) / det
+      q2 += - (-J21 * fr + J11 * fz) / det
     }
-    // Jacobian J = df/d[q1,q2]
-    const J11 = -dX * Math.sin(q1) + L1 * Math.cos(q1) + L2 * Math.cos(q1 + q2)
-    const J12 = L2 * Math.cos(q1 + q2)
-    const J21 = -dX * Math.cos(q1) - L1 * Math.sin(q1) - L2 * Math.sin(q1 + q2)
-    const J22 = -L2 * Math.sin(q1 + q2)
-    const det = J11 * J22 - J12 * J21
-    q1 += - (J22 * fr - J12 * fz) / det
-    q2 += - (-J21 * fr + J11 * fz) / det
   }
   const q3 = d2r(gamma) - q1 - q2
   return {
@@ -184,38 +188,7 @@ const IK_ = ({ x, y, z }, gamma) => {
     q1: r2d(q1),
     q2: r2d(q2),
     q3: r2d(q3),
-    q4: r2d(q4(q0))
   }
-}
-
-/**
- * Inverse kinematics
- * @param {KinematicsOutput} args
- * @param {number} [gamma]
- * @returns {KinematicsInput}
- */
-const IK = ({ x, y, z }, gamma = 180) => {
-  const q0 = r2d(Math.atan2(y, x))
-  let Q = { q0, q1: 0, q2: 0, q3: 0, q4: q4(q0) }
-  let found = false
-  for (let i = 0; i < 100; i++) {
-    const { delta } = FK_(Q, gamma)
-    Q = IK_({
-      x: x - delta[0],
-      y: y - delta[1],
-      z: z - delta[2]
-    }, gamma)
-    const P = FK(Q)
-    const error = Math.hypot(P.x - x, P.y - y, P.z - z)
-    if (error < 1e-2) {
-      found = true
-      break
-    }
-  }
-  if (!found) {
-    console.warn('Solution not found')
-  }
-  return Q
 }
 
 export { FK, IK, K2S, toModel }
