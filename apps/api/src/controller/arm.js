@@ -29,7 +29,7 @@ router.post(
     )
     await servo.toPoint(K2S(preTarget), [], { relax: false })
     await sleep(2000)
-    await servo.toPoint(K2S(target), [], { relax: true, vMaxDegPerSec: 20 })
+    await servo.toPoint(K2S(target), [], { relax: false, vMaxDegPerSec: 20 })
     res.sendStatus(200)
   }
 )

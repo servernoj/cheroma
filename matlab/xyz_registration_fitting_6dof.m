@@ -91,10 +91,10 @@ function X = FK(Q)
   q0 = Q(1); q1 = Q(2); q2 = Q(3); q3 = Q(4);
 
   % Geometry constants must match config.json / JS.
-  H = 130;
+  H = 131;
   L1 = 211;
   L2 = 265;
-  L3 = 50;
+  L3 = 52;
   dX = 20;
 
   Gamma = q1 + q2 + q3;

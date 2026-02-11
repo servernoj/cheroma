@@ -39,7 +39,7 @@ router.post(
   '/channel',
   validator({
     body: z.object({
-      channel: z.number().int().max(5).min(0),
+      channel: z.number().int().max(7).min(0),
       pulseWidthUs: z.number().default(0),
     })
   }),

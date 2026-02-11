@@ -24,6 +24,7 @@ declare global {
     [name in ServoName]: {
       channel: number
       home: number
+      init: number
       calPoints: Array<ServoCalPoint>
     }
   }

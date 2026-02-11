@@ -21,7 +21,7 @@ app.use(errorHandler)
 app.listen(3000, async () => {
   console.log('Server started')
   await driverInit()
-  await toHome({ relax: true, slow: false })
+  // await toHome({ relax: true, slow: false })
 })
 
 

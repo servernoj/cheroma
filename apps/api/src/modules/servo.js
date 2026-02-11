@@ -17,20 +17,21 @@ const freq = 50
 const servoNames = Object.keys(config.servos)
 
 /**
+ * @param {'home' | 'init'} positionName
  * @returns {ServoPosition}
  */
-const getHomePosition = () => Object.entries(config.servos).reduce(
+const getPosition = (positionName) => Object.entries(config.servos).reduce(
   /** * @param {*} acc */
-  (acc, [servoName, { home }]) => {
+  (acc, [servoName, servo]) => {
     return {
       ...acc,
-      [servoName]: home
+      [servoName]: servo[positionName]
     }
   },
   {}
 )
 
-let currentPosition = getHomePosition()
+let currentPosition = getPosition('init')
 
 /**
  * @param {number} angle Angle to interpolate pulseWidth for
@@ -207,7 +208,7 @@ const relax = async (servos = null) => {
  */
 const toHome = async (options = { slow: true, relax: true }) => {
   if (options.slow) {
-    await toPoint(getHomePosition(), [], options)
+    await toPoint(getPosition('home'), [], options)
   } else {
     await throttler({
       array: servoNames,
