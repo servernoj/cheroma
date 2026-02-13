@@ -147,7 +147,7 @@ const setChannel = async ({ channel, pulseWidthUs }) => {
     await writeRegister(REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, 0x00, 0x10]))
     return
   }
-  if (offTicks > 4095) {
+  if (offTicks >= 4095) {
     await writeRegister(REGS.BASE + 4 * channel, Buffer.from([0x00, 0x10, 0x00, 0x00]))
     return
   }

@@ -119,25 +119,25 @@
         "offset": 0
       },
       "home": 90,
-      "init": 90,
+      "init": 0,
       "kinematics": "q3"      
     }
   },
   "board": {
     "grabberChannel": 4,
-    "grab": 3000,
+    "grab": 21000,
     "release": 0,
     "basket": {
       "x": 100,
       "y": 200,
-      "z": 0
+      "z": 30
     }
   },
   "geom": {
     "H": 131,
     "L1": 211,
     "L2": 265,
-    "L3": 52,
+    "L3": 112,
     "dX": 20    
   }
 }

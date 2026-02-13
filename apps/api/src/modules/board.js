@@ -29,6 +29,7 @@ const drop = async () => {
     ]
   )
   await release()
+  await servo.toPoint(K2S(IK(toModel(preTarget))))
 }
 
 export {
