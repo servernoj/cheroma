@@ -1,10 +1,10 @@
 {
   "units": { "pulse": "us", "angle": "deg", "length": "mm" },
   "fitting": {
-    "roll": 0,
-    "pitch": 0,
-    "yaw": 0,
-    "t": [0, 0, 0]
+    "roll": 0.3783,
+    "pitch": 5.5107,
+    "yaw": 2.3960,
+    "t": [ -7.7495, -3.7999, 14.6435 ]
   },
   "servos": {
     "base": {
@@ -14,6 +14,10 @@
         [0.0, 1550],
         [90.0, 2230]
       ],
+      "fitting": {
+        "scale": 0.9411, 
+        "offset": -0.0038
+      },
       "home": 0,
       "init": 0,
       "kinematics": "q0"      
@@ -41,6 +45,10 @@
         [-102.3, 2300],
         [-115.7, 2400]
       ],
+      "fitting": {
+        "scale": 0.9426, 
+        "offset": 0.7973
+      },
       "home": 0,
       "init": -90,
       "kinematics": "q1"      
@@ -72,6 +80,10 @@
         [169.4,2400],
         [174.4,2450]
       ],
+      "fitting": {
+        "scale": 0.9232, 
+        "offset": 9.2638
+      },
       "home": 90,
       "init": 170,
       "kinematics": "q2"      
@@ -102,6 +114,10 @@
         [-92.6, 2400]
 
       ],
+      "fitting": {
+        "scale": 1, 
+        "offset": 0
+      },
       "home": 90,
       "init": 90,
       "kinematics": "q3"      

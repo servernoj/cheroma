@@ -20,12 +20,17 @@ declare global {
   // --
   type ServoCalPoint = [number, number]
   type ServoName = keyof typeof config['servos']
+  type ServoFitting = {
+    scale: number
+    offset: number
+  }
   type ServoData = {
     [name in ServoName]: {
       channel: number
       home: number
       init: number
       calPoints: Array<ServoCalPoint>
+      fitting: ServoFitting
     }
   }
   type ServoPosition = {
