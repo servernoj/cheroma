@@ -20,6 +20,13 @@ router.post(
     res.sendStatus(200)
   }
 )
+router.post(
+  '/init',
+  async (req, res) => {
+    await servo.toPoint(servo.getPosition('init'), [], { relax: true })
+    res.sendStatus(200)
+  }
+)
 
 router.post(
   '/relax',
@@ -52,13 +59,11 @@ router.post(
 router.post(
   '/to',
   validator({
-    body: z.object({
-      base: z.number(),
-      shoulder: z.number(),
-      elbow: z.number(),
-      wrist: z.number(),
-      spinner: z.number(),
-    }),
+    body: z.object(
+      Object.fromEntries(
+        Object.keys(config.servos).map(name => [name, z.number()])
+      )
+    ),
   }),
   async (req, res) => {
     await servo.toPoint(res.locals.parsed.body)
