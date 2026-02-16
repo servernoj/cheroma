@@ -191,4 +191,10 @@ const IK = ({ x, y, z }, options) => {
   }
 }
 
-export { FK, IK, K2S, toModel }
+/**
+ * @param {KinematicsOutput} P 
+ * @returns {ServoPosition}
+ */
+const IKK = P => K2S(IK(toModel(P)))
+
+export { FK, IK, IKK, K2S, toModel }

@@ -1,16 +1,9 @@
-import { sleep, throttler, writeRegister } from './utils.js'
+import { sleep, writeRegister } from './utils.js'
+import { IK, toModel, K2S } from '@/modules/kinematics.js'
 import config from '@/config.json' with {type: 'json'}
+import { freq, REGS } from '@/modules/driver.js'
 import { performance } from 'node:perf_hooks'
 
-const REGS = {
-  MODE1: 0x00,
-  MODE2: 0x01,
-  PRESCALE: 0xFE,
-  BASE: 0x06
-}
-
-// PWM frequency
-const freq = 50
 // Servo names as array
 /** @type {Array<ServoName>} */
 // @ts-ignore
@@ -118,21 +111,6 @@ const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
 const angleDegToPulseUs = angleDegToPulseUsFactory({ clamp: false })
 
 /**
- * Initializes PCA9685 driver
- */
-const init = async () => {
-  // Put the driver to sleep
-  await writeRegister(REGS.MODE1, Buffer.from([0x10]))
-  // Set PWM frequency
-  const prescale = Math.round(25e6 / (4096 * freq)) - 1
-  await writeRegister(REGS.PRESCALE, Buffer.from([prescale]))
-  // Wake up and set address auto increment
-  await writeRegister(REGS.MODE1, Buffer.from([0x20]))
-  // Set PWM output to HIGH and OE to high-z
-  await writeRegister(REGS.MODE2, Buffer.from([0x06]))
-}
-
-/**
  * @param {SetChannel} channel
  */
 const setChannel = async ({ channel, pulseWidthUs }) => {
@@ -193,7 +171,7 @@ const setChannels = async (channels) => {
 /**
  * @param {null | undefined | Array<string>} servos 
  */
-const relax = async (servos = null) => {
+const doRelax = async (servos = null) => {
   servos = servos ?? Object.keys(config.servos)
   await Promise.all(
     servos.map(
@@ -204,37 +182,7 @@ const relax = async (servos = null) => {
     )
   )
 }
-/**
- * @param {{slow?: boolean, relax?: boolean}} [options] 
- */
-const toHome = async (options = { slow: true, relax: true }) => {
-  if (options.slow) {
-    await toPoint(getPosition('home'), [], options)
-  } else {
-    await throttler({
-      array: servoNames,
-      handler: async servoName => {
-        const { channel, home } = config.servos[servoName]
-        await setChannel({
-          channel,
-          pulseWidthUs: angleDegToPulseUs({ angleDeg: home, servoName })
-        })
-        await sleep(500)
-        currentPosition[servoName] = home
-      },
-      bulkSize: 1
-    })
-    if (options.relax) {
-      await relax()
-    }
-  }
-}
 
-/**
- * @param {ServoPosition} from a point to start from
- * @param {ServoPosition} to a point to land at
- * @param {boolean} includeTo a flag controlling actual inclusion of the `to` point
- */
 /**
  * Quintic ease-in-out: zero velocity + zero accel at endpoints.
  * @param {number} t in [0,1]
@@ -333,7 +281,7 @@ const pathPlanner = (from, to, includeTo = true, options) => {
  */
 const toPoint = async (toPosition, via = [], options) => {
   const {
-    relax: doRelax = true,
+    relax = true,
     dtMs = 20,
     vMaxDegPerSec = 45,
   } = options ?? {}
@@ -389,17 +337,70 @@ const toPoint = async (toPosition, via = [], options) => {
       nextTick = now + dtMs
     }
   }
-  if (doRelax) {
-    await relax()
+  if (relax) {
+    await doRelax()
   }
+}
+
+/**
+ * @param {KinematicsOutput} start 
+ * @param {KinematicsOutput} delta 
+ * @param {{
+ *   dtMs?: number
+ *   maxSpeed?: number
+ * }} [options] 
+ */
+const line = async (start, delta, options) => {
+  const {
+    dtMs = 20,
+    // millimeter per second
+    maxSpeed = 3
+  } = options ?? {}
+  const maxDistance = Math.max(...Object.values(delta).map(Math.abs))
+  const N = Math.round(maxDistance / maxSpeed)
+  const denom = N - 1
+  const points = Array(N).fill().map(
+    (_, idx) => {
+      const point = K2S(IK(toModel({
+        x: start.x + idx * delta.x / denom,
+        y: start.y + idx * delta.y / denom,
+        z: start.z + idx * delta.z / denom,
+      })))
+      return {
+        point,
+        setChannelsData: Object.entries(point).map(
+          /** @param {*} arg*/
+          ([servoName, angleDeg]) => {
+            return {
+              channel: config.servos[servoName].channel,
+              pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
+            }
+          }
+        )
+      }
+    }
+  )
+  let nextTick = performance.now() + dtMs
+  for (const { point, setChannelsData } of points) {
+    await setChannels(setChannelsData)
+    currentPosition = point
+    const now = performance.now()
+    const slack = nextTick - now
+    if (slack > 0) {
+      await sleep(slack)
+      nextTick += dtMs
+    } else {
+      nextTick = now + dtMs
+    }
+  }
+
 }
 
 export {
   getPosition,
   setChannel,
   setChannels,
-  init,
-  toHome,
-  relax,
+  doRelax,
   toPoint,
+  line
 }

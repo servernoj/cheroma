@@ -1,7 +1,6 @@
 import express from 'express'
-import { IK, K2S, toModel } from '@/modules/kinematics.js'
-import * as servo from '@/modules/servo.js'
 import * as board from '@/modules/board.js'
+import * as servo from '@/modules/servo.js'
 import { validator } from '@/controller/mw/index.js'
 import z from 'zod'
 import { sleep } from '@/modules/utils.js'
@@ -10,35 +9,50 @@ const router = express.Router()
 
 router.post(
   '/grab',
-  validator({
-    body: z.object({
-      to: z.object({
-        x: z.number(),
-        y: z.number(),
-        z: z.number().default(10)
-      })
-    })
-  }),
   async (req, res) => {
-    const { to } = res.locals.parsed.body
-    const target = IK(toModel(to))
-    const preTarget = IK(
-      toModel({
-        ...to,
-        z: to.z + 100
-      })
-    )
-    await servo.toPoint(K2S(preTarget), [], { relax: false })
     await board.grab()
-    await servo.toPoint(K2S(target), [], { relax: false, vMaxDegPerSec: 20 })
-    await sleep(1000)
-    await servo.toPoint(K2S(preTarget), [], { relax: false, vMaxDegPerSec: 20 })
-    await board.drop()
-    await servo.toHome()
     res.sendStatus(200)
   }
 )
 
+router.post(
+  '/release',
+  async (req, res) => {
+    await board.release()
+    res.sendStatus(200)
+  }
+)
 
+router.post(
+  '/move',
+  validator({
+    body: z.object({
+      from: z.object({
+        x: z.number(),
+        y: z.number(),
+        z: z.number()
+      }),
+      to: z.object({
+        x: z.number(),
+        y: z.number(),
+        z: z.number()
+      })
+    })
+  }),
+  async (req, res) => {
+    const { from, to } = res.locals.parsed.body
+    await board.descent(from)
+    await board.grab()
+    await board.search(from, { delta: 3 })
+    await sleep(1000)
+    await board.lift(from, { liftLength: 50 })
+    await board.descent(to, { vMaxDegPerSec: 30 })
+    await sleep(1000)
+    await board.release()
+    await board.lift(to, { liftLength: 50 })
+    await servo.toPoint(servo.getPosition('home'), [], { relax: true })
+    res.sendStatus(200)
+  }
+)
 
 export default router

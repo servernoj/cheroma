@@ -9,14 +9,8 @@ const router = express.Router()
 
 router.post(
   '/home',
-  validator({
-    query: z.object({
-      slow: z.boolean().default(true)
-    })
-  }),
   async (req, res) => {
-    const { slow } = res.locals.parsed.query
-    await servo.toHome({ slow, relax: true })
+    await servo.toPoint(servo.getPosition('home'), [], { relax: true })
     res.sendStatus(200)
   }
 )
@@ -37,7 +31,7 @@ router.post(
   }),
   async (req, res) => {
     const { servos } = res.locals.parsed.body ?? {}
-    await servo.relax(servos)
+    await servo.doRelax(servos)
     res.sendStatus(200)
   }
 )
