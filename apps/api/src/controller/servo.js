@@ -4,7 +4,6 @@ import config from '@/config.json' with {type: 'json'}
 import { validator } from '@/controller/mw/index.js'
 import z from 'zod'
 
-
 const router = express.Router()
 
 router.post(

@@ -1,6 +1,7 @@
 import * as servo from '@/modules/servo.js'
 import { IKK } from '@/modules/kinematics.js'
 import config from '@/config.json' with {type: 'json'}
+import { sleep } from './utils.js'
 
 const release = async () => {
   await servo.setChannel({
@@ -21,12 +22,14 @@ const grab = async () => {
  * @param {{
  *   descentLength?: number
  *   vMaxDegPerSec?: number
+ *   delay?: number
  * }} [options] 
  */
 const descent = async (to, options) => {
   const {
     descentLength = 50,
-    vMaxDegPerSec
+    vMaxDegPerSec,
+    delay,
   } = options ?? {}
   const preTarget = {
     ...to,
@@ -36,6 +39,7 @@ const descent = async (to, options) => {
     relax: false,
     vMaxDegPerSec
   })
+  await sleep(delay)
   await servo.line(preTarget, { x: 0, y: 0, z: -descentLength })
 }
 
@@ -62,12 +66,20 @@ const lift = async (to, options) => {
 const search = async (to, options) => {
   let { x, y, z } = to
   const {
-    delta = 10
+    delta = 10,
   } = options ?? {}
   const via = [
+    [-delta, -delta, +delta / 2],
+    [-delta, -delta, -delta / 2],
     [-delta, -delta, 0],
+    [+delta, -delta, +delta / 2],
+    [+delta, -delta, -delta / 2],
     [+delta, -delta, 0],
+    [+delta, +delta, +delta / 2],
+    [+delta, +delta, -delta / 2],
     [+delta, +delta, 0],
+    [-delta, +delta, +delta / 2],
+    [-delta, +delta, -delta / 2],
     [-delta, +delta, 0],
     [0, 0, 0]
   ].map(

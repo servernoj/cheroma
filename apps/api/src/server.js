@@ -5,22 +5,36 @@ import servo from '@/controller/servo.js'
 import arm from '@/controller/arm.js'
 import board from '@/controller/board.js'
 import { init as driverInit } from '@/modules/driver.js'
+import { getPosition, toPoint } from '@/modules/servo.js'
 
-const app = express()
-app.use(morgan('dev'))
-app.use(express.json(), queryTypes)
+export default async () => {
+  const app = express()
 
-app.get('/health', (req, res) => res.sendStatus(200))
-app.use('/servo', servo)
-app.use('/arm', arm)
-app.use('/board', board)
+  app.use(morgan('dev'))
+  app.use(express.json(), queryTypes)
 
-app.use(fallback)
-app.use(errorHandler)
+  app.get('/health', (req, res) => res.sendStatus(200))
+  app.use('/servo', servo)
+  app.use('/arm', arm)
+  app.use('/board', board)
 
-app.listen(3000, async () => {
-  console.log('Server started')
-  await driverInit()
-})
+  app.use(fallback)
+  app.use(errorHandler)
 
+  app.listen(3000, async () => {
+    console.log('Server started')
+    await driverInit()
+  })
+  const getShutdownHandler = (signal) => {
+    const handler = async () => {
+      process.off(signal, handler)
+      console.warn(`Acting upon '${signal}' signal...`)
+      await toPoint(getPosition('init'), [], { relax: true })
+      process.kill(process.pid, signal)
+    }
+    return handler
+  }
+  process.on('SIGINT', getShutdownHandler('SIGINT'))
+  process.on('SIGTERM', getShutdownHandler('SIGTERM'))
+}
 
