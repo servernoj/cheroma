@@ -41,16 +41,7 @@ router.post(
   }),
   async (req, res) => {
     const { from, to } = res.locals.parsed.body
-    await board.descent(from)
-    await board.grab()
-    await board.search(from, { delta: 5 })
-    await sleep(1000)
-    await board.lift(from, { liftLength: 50 })
-    await board.descent(to, { vMaxDegPerSec: 20, delay: 1000 })
-    await sleep(1000)
-    await board.release()
-    await board.lift(to, { liftLength: 50 })
-    await servo.toPoint(servo.getPosition('home'), [], { relax: true })
+    await board.move(from, to)
     res.sendStatus(200)
   }
 )

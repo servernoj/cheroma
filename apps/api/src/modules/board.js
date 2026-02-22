@@ -69,26 +69,63 @@ const search = async (to, options) => {
     delta = 10,
   } = options ?? {}
   const via = [
-    [-delta, -delta, +delta / 2],
-    [-delta, -delta, -delta / 2],
+    [0, 0, delta],
+    [0, 0, 0],
+    [0, 0, delta],
+    // --
+    [-delta, -delta, delta],
     [-delta, -delta, 0],
-    [+delta, -delta, +delta / 2],
-    [+delta, -delta, -delta / 2],
+    [-delta, -delta, delta],
+    // --
+    [+delta, -delta, delta],
     [+delta, -delta, 0],
-    [+delta, +delta, +delta / 2],
-    [+delta, +delta, -delta / 2],
+    [+delta, -delta, delta],
+    // --
+    [+delta, +delta, delta],
     [+delta, +delta, 0],
-    [-delta, +delta, +delta / 2],
-    [-delta, +delta, -delta / 2],
+    [+delta, +delta, delta],
+    // --
+    [-delta, +delta, delta],
     [-delta, +delta, 0],
-    [0, 0, 0]
+    [-delta, +delta, delta],
   ].map(
     ([dx, dy, dz]) => IKK({ x: x + dx, y: y + dy, z: z + dz })
   )
-  await servo.toPoint(IKK({ x, y, z }), via, { relax: false, vMaxDegPerSec: 5 })
+  await servo.toPoint(IKK({ x, y, z }), via, { relax: false, vMaxDegPerSec: 10 })
+}
+
+/**
+ * Picks up and moves a piece `from` to `to` and returns to `home`
+ * @param {KinematicsOutput} from
+ * @param {KinematicsOutput} to
+ * @param {{
+ *   delay?: number
+ *   vMaxDegPerSec?: number
+ *   liftLength?: number
+ *   delta?: number
+ * }} [options] 
+ */
+const move = async (from, to, options) => {
+  const {
+    delay = 2000,
+    vMaxDegPerSec = 20,
+    liftLength = 50,
+    delta = 5
+  } = options ?? {}
+  await descent(from)
+  await grab()
+  await search(from, { delta })
+  await sleep(1000)
+  await lift(from, { liftLength })
+  await descent(to, { vMaxDegPerSec, delay })
+  await sleep(1000)
+  await release()
+  await lift(to, { liftLength })
+  await servo.toPoint(servo.getPosition('home'), [], { relax: true })
 }
 
 export {
+  move,
   search,
   grab,
   release,
