@@ -27,11 +27,14 @@ After=network.target
 [Service]
 Type=simple
 User=<username>
-WorkingDirectory=/home/<username>/cheroma
-ExecStart=/bin/bash -lc 'source $HOME/.nvm/nvm.sh && pnpm api start'
+WorkingDirectory=/home/<username>/cheroma/apps/api
+ExecStart=/bin/bash -lc 'source $HOME/.nvm/nvm.sh && node --env-file .env src/index.js'
 Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+SendSIGKILL=yes
 
 [Install]
 WantedBy=multi-user.target
@@ -58,14 +61,3 @@ i2cset -y 1 0x40 0x01 0x0C # set output + configure PWM reload logic
 
 i2cset -y 1 0x40 0x06 0x00 0x00 0x40 0x01 i # center
 ```
-
-## Octave
-
-```` octave
-syms L1 L2 Y0 A1 A2 real
-assume L1 L2 Y0 positive
-A2_expr = asin((Y0 - L1*sin(A1))/L2) - A1;
-X = L1*cos(A1) + L2*cos(A1 + A2_expr);
-dX_dA1 = diff(X, A1)
-extremal_A1 = solve(dX_dA1 == 0, A1)
-````
