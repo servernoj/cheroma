@@ -107,18 +107,14 @@ const search = async (to, options) => {
  * @param {string} toNotation
  * @param {keyof Figures} figure
  * @param {{
- *   delay?: number
  *   vMaxDegPerSec?: number
  *   liftLength?: number
- *   delta?: number
  * }} [options] 
  */
 const move = async (fromNotation, toNotation, figure, options) => {
   const {
-    delay = 2000,
-    vMaxDegPerSec = 15,
+    vMaxDegPerSec = 20,
     liftLength = 50,
-    delta = 5
   } = options ?? {}
   const height = config.figures[figure].height
   const from = notationToPosition(fromNotation)
@@ -129,12 +125,12 @@ const move = async (fromNotation, toNotation, figure, options) => {
   Object.assign(to, {
     z: to.z + height
   })
-  await descent(from, { delay: 1000 })
+  await descent(from, { vMaxDegPerSec: 30, delay: 2000 })
   await sleep(1000)
   await grab()
   await sleep(1000)
   await lift(from, { liftLength })
-  await descent(to, { vMaxDegPerSec, delay, dtMs: 10 })
+  await descent(to, { vMaxDegPerSec, delay: 3000 })
   await sleep(1000)
   await release()
   await lift(to, { liftLength })

@@ -37,7 +37,7 @@ router.post(
       x,
       y,
       z: z + height
-    })
+    }, { delay: 1000 })
     res.sendStatus(200)
   }
 )
@@ -53,7 +53,7 @@ router.post(
   }),
   async (req, res) => {
     const { from, to, figure } = res.locals.parsed.body
-    await board.move(from, to, figure, { delta: 10 })
+    await board.move(from, to, figure)
     res.sendStatus(200)
   }
 )

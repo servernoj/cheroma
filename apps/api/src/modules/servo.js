@@ -205,7 +205,6 @@ const easeQuintic = (t) => {
  *
  * @param {ServoPosition} from a point to start from (deg)
  * @param {ServoPosition} to a point to land at (deg)
- * @param {boolean} includeTo include the final point explicitly
  * @param {{
  *   dtMs?: number,
  *   vMaxDegPerSec?: number,
@@ -213,7 +212,7 @@ const easeQuintic = (t) => {
  * }} [options]
  * @returns {Array<ServoPosition>}
  */
-const pathPlanner = (from, to, includeTo = true, options) => {
+const pathPlanner = (from, to, options) => {
   const {
     dtMs = 20,
     vMaxDegPerSec = 90,
@@ -234,10 +233,8 @@ const pathPlanner = (from, to, includeTo = true, options) => {
     },
     0
   )
-
-  // No movement: either return [from] or [] depending on includeTo semantics.
   if (maxDeltaDeg === 0) {
-    return includeTo ? [from] : []
+    return [from]
   }
 
   // Choose number of points based on desired max speed.
@@ -262,15 +259,10 @@ const pathPlanner = (from, to, includeTo = true, options) => {
     }
   )
 
-  return includeTo ? points : points.slice(0, -1)
+  return points
 }
 
 /**
- * Smooth version of `toPoint`:
- * - Builds a joint-space path using `pathPlannerSmooth` (variable number of steps).
- * - Uses quintic easing to reduce jerk and visible "stepping".
- * - Keeps a fixed update cadence (dtMs), matching typical 50Hz servo behavior.
- *
  * @param {ServoPosition} toPosition final position (angles in deg) to move servos
  * @param {Array<ServoPosition>} [via] list of intermediate points to be explicitly included
  * @param {{
@@ -291,43 +283,45 @@ const toPoint = async (toPosition, via = [], options) => {
       const segmentPoints = pathPlanner(
         acc.last,
         next,
-        true,
         { dtMs, vMaxDegPerSec, easing: 'quintic' }
       )
       if (idx > 0 && segmentPoints.length > 0) {
         segmentPoints.shift()
       }
-      acc.points.push(...segmentPoints)
       acc.last = next
+      acc.points.push(
+        ...segmentPoints.map(
+          point => {
+            const setChannelsData = Object.entries(point).map(
+              /** @param {*} arg*/
+              ([servoName, angleDeg]) => {
+                return {
+                  channel: config.servos[servoName].channel,
+                  pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
+                }
+              }
+            )
+            return { point, setChannelsData }
+          }
+        )
+      )
       return acc
     },
     {
-      last: currentPosition,
-      points: []
+      points: [],
+      last: currentPosition
     }
   )
   let nextTick = performance.now() + dtMs
-  for (let k = 0; k < points.length; k += 1) {
-    const point = points[k]
-    const setChannelsData = Object.entries(point).map(
-      /** @param {*} arg*/
-      ([servoName, angleDeg]) => {
-        return {
-          channel: config.servos[servoName].channel,
-          pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
-        }
-      }
-    )
+  for (const { point, setChannelsData } of points) {
     await setChannels(setChannelsData)
     currentPosition = point
-
     const now = performance.now()
     const slack = nextTick - now
     if (slack > 0) {
       await sleep(slack)
       nextTick += dtMs
     } else {
-      // Missed the tick: reset schedule so we don't "catch up" with bursts.
       nextTick = now + dtMs
     }
   }
