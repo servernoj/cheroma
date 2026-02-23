@@ -1,9 +1,7 @@
 import express from 'express'
 import * as board from '@/modules/board.js'
-import * as servo from '@/modules/servo.js'
 import { validator } from '@/controller/mw/index.js'
 import z from 'zod'
-import { sleep } from '@/modules/utils.js'
 
 const router = express.Router()
 
@@ -24,26 +22,41 @@ router.post(
 )
 
 router.post(
-  '/move',
+  '/to',
   validator({
     body: z.object({
-      from: z.object({
-        x: z.number(),
-        y: z.number(),
-        z: z.number()
-      }),
-      to: z.object({
-        x: z.number(),
-        y: z.number(),
-        z: z.number()
-      })
+      to: z.string(),
+      height: z.number().int().nonnegative().default(0)
     })
   }),
   async (req, res) => {
-    const { from, to } = res.locals.parsed.body
-    await board.move(from, to)
+    const { to, height } = res.locals.parsed.body
+    const { x, y, z } = board.notationToPosition(to)
+    await board.home()
+    await board.descent({
+      x,
+      y,
+      z: z + height
+    })
     res.sendStatus(200)
   }
 )
+
+router.post(
+  '/move',
+  validator({
+    body: z.object({
+      from: z.string(),
+      to: z.string(),
+      figure: z.enum(board.figures)
+    })
+  }),
+  async (req, res) => {
+    const { from, to, figure } = res.locals.parsed.body
+    await board.move(from, to, figure, { delta: 10 })
+    res.sendStatus(200)
+  }
+)
+
 
 export default router

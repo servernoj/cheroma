@@ -286,12 +286,6 @@ const toPoint = async (toPosition, via = [], options) => {
     vMaxDegPerSec = 45,
   } = options ?? {}
 
-  // Build a continuous point list that *includes* each via knot.
-  // IMPORTANT:
-  // - `pathPlanner(..., includeTo=false)` would drop the knot point, but the next segment
-  //   would still start from that knot, creating a discontinuity (a "jump").
-  // - Instead, always include the segment endpoint, then drop the first point of each
-  //   subsequent segment to avoid duplicates.
   const { points } = [...via, toPosition].reduce(
     (acc, next, idx) => {
       const segmentPoints = pathPlanner(

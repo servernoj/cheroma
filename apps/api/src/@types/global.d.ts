@@ -48,10 +48,19 @@ declare global {
     t: Array<number>
   }
   type Board = {
+    originOffset: [number, number, number],
+    cellSize: number
     gripperChannel: number
     open: number
     close: number
     basket: KinematicsOutput
+    correction: Record<string, [number, number, number]>
+  }
+  type Figures = {
+    [f in keyof typeof config['figures']]: {
+      height: number
+      short: string
+    }
   }
   type Config = {
     units: {
@@ -63,6 +72,7 @@ declare global {
     geom: GeomData
     fitting: Fitting
     board: Board
+    figures: Figures
   }
 }
 
