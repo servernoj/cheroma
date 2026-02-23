@@ -237,9 +237,7 @@ const pathPlanner = (from, to, options) => {
     return [from]
   }
 
-  // Choose number of points based on desired max speed.
-  // T ~= maxDelta/vMax. With cadence dt, N ~= T/dt + 1.
-  const T = maxDeltaDeg / vMaxDegPerSec
+  const T = maxDeltaDeg * 15 / (8 * vMaxDegPerSec)
   const N = Math.max(2, Math.ceil(T / dtSec) + 1)
 
   const points = Array(N).fill().map(

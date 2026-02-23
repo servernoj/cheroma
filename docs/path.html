@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Path Planner – Quintic Easing Analysis</title>
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+<style>
+  :root { color-scheme: light; }
+  body {
+    max-width: 720px;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.7;
+    color: #1a1a1a;
+    background: #fdfdfd;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid #333; padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2rem; }
+  .eq {
+    background: #f4f4f0;
+    border-left: 3px solid #888;
+    padding: .8rem 1.2rem;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+  code { background: #eee; padding: .15em .35em; border-radius: 3px; font-size: .9em; }
+</style>
+</head>
+<body>
+
+<h1>Quintic Easing – Peak Velocity Derivation</h1>
+
+<h2>1. The easing function</h2>
+<p>Normalized position as a function of normalized time $\tau \in [0,1]$:</p>
+<div class="eq">
+$$s(\tau) = 10\,\tau^3 - 15\,\tau^4 + 6\,\tau^5$$
+</div>
+<p>This satisfies $s(0)=0$, $s(1)=1$, and has zero first and second derivatives at both endpoints.</p>
+
+<h2>2. Normalized velocity</h2>
+<p>Differentiate with respect to $\tau$:</p>
+<div class="eq">
+$$s'(\tau) = 30\,\tau^2 - 60\,\tau^3 + 30\,\tau^4 = 30\,\tau^2(1-\tau)^2$$
+</div>
+
+<h2>3. Finding the peak</h2>
+<p>Set $s''(\tau) = 0$:</p>
+<div class="eq">
+$$s''(\tau) = 60\,\tau\,(1-\tau)(1-2\tau) = 0 \quad\Longrightarrow\quad \tau = 0,\;\tfrac{1}{2},\;1$$
+</div>
+<p>Evaluate at the interior critical point $\tau = \tfrac{1}{2}$:</p>
+<div class="eq">
+$$s'\!\left(\tfrac{1}{2}\right) = 30 \cdot \frac{1}{4} \cdot \frac{1}{4} = \frac{30}{16} = \frac{15}{8} = 1.875$$
+</div>
+
+<h2>4. Real-units velocity</h2>
+<p>Let $\Delta$ be the total angular displacement and $T$ the total traversal time. Real position is:</p>
+<div class="eq">
+$$\theta(t) = \theta_{\text{from}} + s\!\left(\frac{t}{T}\right)\,\Delta$$
+</div>
+<p>So real velocity is:</p>
+<div class="eq">
+$$v(t) = \frac{\Delta}{T}\;s'\!\left(\frac{t}{T}\right)$$
+</div>
+<p>Peak real velocity:</p>
+<div class="eq">
+$$v_{\text{peak}} = \frac{\Delta}{T} \cdot \frac{15}{8}$$
+</div>
+
+<h2>5. The bug in the current code</h2>
+<p>The current planner sets the total time as if average speed equals $v_{\max}$:</p>
+<div class="eq">
+$$T_{\text{current}} = \frac{\Delta}{v_{\max}}$$
+</div>
+<p>Substituting into the peak-velocity expression:</p>
+<div class="eq">
+$$v_{\text{peak}} = \frac{\Delta}{\;\Delta / v_{\max}\;} \cdot \frac{15}{8} = \frac{15}{8}\,v_{\max} \approx 1.875\,v_{\max}$$
+</div>
+<p>The arm moves <strong>87.5 % faster</strong> than intended at mid-trajectory.</p>
+
+<h2>6. Corrected duration</h2>
+<p>To enforce $v_{\text{peak}} = v_{\max}$, solve for $T$:</p>
+<div class="eq">
+$$v_{\max} = \frac{\Delta}{T} \cdot \frac{15}{8} \quad\Longrightarrow\quad T_{\text{corrected}} = \frac{15}{8} \cdot \frac{\Delta}{v_{\max}}$$
+</div>
+<p>Number of waypoints at cadence $\delta t$:</p>
+<div class="eq">
+$$N = \left\lceil \frac{T_{\text{corrected}}}{\delta t} \right\rceil + 1 = \left\lceil \frac{15\,\Delta}{8\,v_{\max}\,\delta t} \right\rceil + 1$$
+</div>
+
+<h2>7. Why no numerical integration is needed</h2>
+<p>
+The easing function $s(\tau)$ <em>is</em> the closed-form integral of the velocity profile.
+Evaluating it at uniformly spaced $\tau_i = \frac{i}{N-1}$ is identical to stepping
+through time at fixed $\delta t$ and reading off position from the already-integrated curve.
+</p>
+<p>
+For <em>any</em> normalized easing where $\displaystyle\int_0^1 s'(\tau)\,d\tau = 1$,
+the average normalized speed is $1$ and the peak-to-average ratio is simply $\max\!\big(s'(\tau)\big)$.
+That ratio is a constant of the curve shape — independent of $\Delta$ or $v_{\max}$ — and can be
+precomputed once.
+</p>
+
+</body>
+</html>

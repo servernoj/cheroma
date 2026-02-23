@@ -1,7 +1,10 @@
 import { writeRegister } from '@/modules/utils.js'
+import config from '@/config.json' with {type: 'json'}
 
 // PWM frequency
-const freq = 50
+const desiredFreq = config.driver.freq
+const prescale = Math.round(25e6 / (4096 * desiredFreq)) - 1
+const freq = 25e6 / (4096 * (prescale + 1))
 
 const REGS = {
   MODE1: 0x00,
@@ -17,7 +20,6 @@ const init = async () => {
   // Put the driver to sleep
   await writeRegister(REGS.MODE1, Buffer.from([0x10]))
   // Set PWM frequency
-  const prescale = Math.round(25e6 / (4096 * freq)) - 1
   await writeRegister(REGS.PRESCALE, Buffer.from([prescale]))
   // Wake up and set address auto increment
   await writeRegister(REGS.MODE1, Buffer.from([0x20]))

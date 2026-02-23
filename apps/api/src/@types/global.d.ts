@@ -54,7 +54,6 @@ declare global {
     open: number
     close: number
     basket: KinematicsOutput
-    correction: Record<string, [number, number, number]>
   }
   type Figures = {
     [f in keyof typeof config['figures']]: {

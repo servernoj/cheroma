@@ -107,13 +107,11 @@ const search = async (to, options) => {
  * @param {string} toNotation
  * @param {keyof Figures} figure
  * @param {{
- *   vMaxDegPerSec?: number
  *   liftLength?: number
  * }} [options] 
  */
 const move = async (fromNotation, toNotation, figure, options) => {
   const {
-    vMaxDegPerSec = 20,
     liftLength = 50,
   } = options ?? {}
   const height = config.figures[figure].height
@@ -130,7 +128,8 @@ const move = async (fromNotation, toNotation, figure, options) => {
   await grab()
   await sleep(1000)
   await lift(from, { liftLength })
-  await descent(to, { vMaxDegPerSec, delay: 3000 })
+  await sleep(1000)
+  await descent(to, { vMaxDegPerSec: 15, delay: 3000 })
   await sleep(1000)
   await release()
   await lift(to, { liftLength })
@@ -143,7 +142,7 @@ const move = async (fromNotation, toNotation, figure, options) => {
  * @returns {KinematicsOutput}
  */
 const notationToPosition = notation => {
-  const { originOffset, cellSize, correction } = config.board
+  const { originOffset, cellSize } = config.board
   if (
     typeof notation !== 'string' ||
     notation.length !== 2
@@ -154,10 +153,9 @@ const notationToPosition = notation => {
   if (!rank || !file) {
     throw new Error(`Invalid notation: ${notation}, must match /^[a-h][1-8]$/`)
   }
-  const offset = correction?.[notation] ?? [0, 0, 0]
-  const x = Math.round(originOffset[0] + (Number(rank) - 1) * cellSize + cellSize * 0.5) + offset[0]
-  const y = Math.round(originOffset[1] - (file.charCodeAt(0) - 'a'.charCodeAt(0)) * cellSize - cellSize * 0.5) + offset[1]
-  const z = originOffset[2] + offset[2]
+  const x = Math.round(originOffset[0] + (Number(rank) - 1) * cellSize + cellSize * 0.5)
+  const y = Math.round(originOffset[1] - (file.charCodeAt(0) - 'a'.charCodeAt(0)) * cellSize - cellSize * 0.5)
+  const z = originOffset[2]
   return { x, y, z }
 }
 
