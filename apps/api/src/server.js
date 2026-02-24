@@ -6,6 +6,7 @@ import arm from '@/controller/arm.js'
 import board from '@/controller/board.js'
 import { init as driverInit } from '@/modules/driver.js'
 import { getPosition, toPoint } from '@/modules/servo.js'
+import { closeBus } from '@/modules/utils.js'
 
 export default async () => {
   const app = express()
@@ -30,6 +31,7 @@ export default async () => {
       process.off(signal, handler)
       console.warn(`Acting upon '${signal}' signal...`)
       await toPoint(getPosition('init'), [], { relax: true })
+      await closeBus()
       process.kill(process.pid, signal)
     }
     return handler

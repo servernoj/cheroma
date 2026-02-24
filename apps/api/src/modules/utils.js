@@ -20,19 +20,40 @@ const sleep = (ms) => new Promise(
 )
 
 /**
+ * Helper to reduce i2c bus opening overhead
+ */
+let busPromise = null
+const getBus = () => {
+  if (!busPromise) {
+    busPromise = i2c.openPromisified(1)
+  }
+  return busPromise
+}
+
+/**
  * Write to an I2C register
  * @param {number} regAddr Register address (0x00-0xFF)
  * @param {Buffer} data Data to write (Buffer or array of bytes)
  * @returns {Promise<void>}
  */
 const writeRegister = async (regAddr, data) => {
-  const bus = await i2c.openPromisified(1)
+  const bus = await getBus()
   const buffer = Buffer.from([
     regAddr,
     ...(data ?? Buffer.from([0xFF]))
   ])
   await bus.i2cWrite(deviceAddr, buffer.length, buffer)
-  await bus.close()
+}
+
+/**
+ * Close i2c bus handler
+ */
+const closeBus = async () => {
+  if (busPromise) {
+    const bus = await busPromise
+    busPromise = null
+    await bus.close()
+  }
 }
 
 /**
@@ -187,5 +208,6 @@ export {
   mOp,
   sleep,
   writeRegister,
-  throttler
+  throttler,
+  closeBus
 }
