@@ -1,7 +1,14 @@
 {
   "editor.formatOnSave": true,
-
   "[json]": {
     "editor.formatOnSave": false
-  }
+  },
+  "spellright.language": [
+    "en"
+  ],
+  "spellright.documentTypes": [
+    "markdown",
+    "latex",
+    "plaintext"
+  ]
 }

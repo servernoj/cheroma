@@ -25,7 +25,6 @@ const grab = async () => {
  *   descentLength?: number
  *   vMaxDegPerSec?: number
  *   delay?: number
- *   dtMs?: number
  * }} [options] 
  */
 const descent = async (to, options) => {
@@ -33,7 +32,6 @@ const descent = async (to, options) => {
     descentLength = 50,
     vMaxDegPerSec,
     delay,
-    dtMs
   } = options ?? {}
   const preTarget = {
     ...to,
@@ -41,8 +39,7 @@ const descent = async (to, options) => {
   }
   await servo.toPoint(IKK(preTarget), [], {
     relax: false,
-    vMaxDegPerSec,
-    dtMs
+    vMaxDegPerSec
   })
   await sleep(delay)
   await servo.line(preTarget, { x: 0, y: 0, z: -descentLength })

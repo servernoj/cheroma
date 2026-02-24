@@ -197,8 +197,7 @@ const easeQuintic = (t) => {
 }
 
 /**
- * Smooth path planner: chooses number of points from max speed, then eases.
- *
+ * Path planner: chooses number of points from max speed, then eases.
  * - Uses a fixed update cadence (dtMs) and computes steps so that the maximum joint
  *   motion does not exceed vMaxDegPerSec.
  * - Interpolates in joint space with a smooth easing curve (quintic) to reduce jerk.
@@ -214,8 +213,8 @@ const easeQuintic = (t) => {
  */
 const pathPlanner = (from, to, options) => {
   const {
-    dtMs = 20,
-    vMaxDegPerSec = 90,
+    dtMs,
+    vMaxDegPerSec,
     easing = 'quintic'
   } = options ?? {}
 
@@ -272,7 +271,7 @@ const pathPlanner = (from, to, options) => {
 const toPoint = async (toPosition, via = [], options) => {
   const {
     relax = true,
-    dtMs = 20,
+    dtMs = 5,
     vMaxDegPerSec = 45,
   } = options ?? {}
 
