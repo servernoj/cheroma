@@ -1,7 +1,11 @@
 {
+  "options": {
+    "debug": false
+  },
   "units": { "pulse": "us", "angle": "deg", "length": "mm" },
   "driver": {
-    "freq": 250
+    "freq": 250,
+    "dtMs": 5
   },
   "fitting": {
     "roll": 0.3783,
@@ -140,7 +144,7 @@
   },
   "figures": {
     "queen": {
-      "height": 65,
+      "height": 70,
       "short": "q"
     },
     "pawn": {

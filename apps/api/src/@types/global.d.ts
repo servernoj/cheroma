@@ -61,17 +61,26 @@ declare global {
       short: string
     }
   }
+  type Driver = {
+    dtMs: number
+    freq: number
+  }
+  type Options = {
+    debug: boolean
+  }
   type Config = {
     units: {
       pulse: 'us'
       angle: 'deg'
       length: 'mm'
     }
+    options: Options
     servos: ServoData
     geom: GeomData
     fitting: Fitting
     board: Board
     figures: Figures
+    driver: Driver
   }
 }
 

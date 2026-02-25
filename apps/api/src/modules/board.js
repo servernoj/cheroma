@@ -22,80 +22,71 @@ const grab = async () => {
 /**
  * @param {KinematicsOutput} to 
  * @param {{
- *   descentLength?: number
+ *   elevation?: number
  *   vMaxDegPerSec?: number
  *   delay?: number
  * }} [options] 
  */
 const descent = async (to, options) => {
   const {
-    descentLength = 50,
+    elevation = 50,
     vMaxDegPerSec,
     delay,
   } = options ?? {}
   const preTarget = {
     ...to,
-    z: to.z + descentLength
+    z: to.z + elevation
   }
   await servo.toPoint(IKK(preTarget), [], {
     relax: false,
     vMaxDegPerSec
   })
   await sleep(delay)
-  await servo.line(preTarget, { x: 0, y: 0, z: -descentLength })
+  await servo.line(preTarget, { x: 0, y: 0, z: -elevation })
 }
 
 /**
  * @param {KinematicsOutput} to 
  * @param {{
- *   liftLength?: number
+ *   elevation?: number
  *   maxSpeed?: number
  * }} [options] 
  */
 const lift = async (to, options) => {
   const {
-    liftLength = 50,
-    maxSpeed = 2
+    elevation = 50,
   } = options ?? {}
   await servo.toPoint(IKK(to), [], { relax: false })
-  await servo.line(to, { x: 0, y: 0, z: liftLength }, { maxSpeed })
+  await servo.line(to, { x: 0, y: 0, z: elevation })
 }
 
 /**
- * @param {KinematicsOutput} to
+ * @param {KinematicsOutput} at
  * @param {{
- *   delta: number
+ *   delta?: number
+ *   vMaxDegPerSec?: number
  * }} [options] 
  */
-const search = async (to, options) => {
-  let { x, y, z } = to
+const search = async (at, options) => {
+  let { x, y, z } = at
   const {
-    delta = 10,
+    delta = 5,
+    vMaxDegPerSec = 20
   } = options ?? {}
   const via = [
-    [0, 0, delta],
     [0, 0, 0],
-    [0, 0, delta],
-    // --
-    [-delta, -delta, delta],
     [-delta, -delta, 0],
-    [-delta, -delta, delta],
-    // --
-    [+delta, -delta, delta],
-    [+delta, -delta, 0],
-    [+delta, -delta, delta],
-    // --
-    [+delta, +delta, delta],
-    [+delta, +delta, 0],
-    [+delta, +delta, delta],
-    // --
-    [-delta, +delta, delta],
+    [0, 0, 0],
     [-delta, +delta, 0],
-    [-delta, +delta, delta],
+    [0, 0, 0],
+    [+delta, +delta, 0],
+    [0, 0, 0],
+    [+delta, -delta, 0],
+    [0, 0, 0]
   ].map(
     ([dx, dy, dz]) => IKK({ x: x + dx, y: y + dy, z: z + dz })
   )
-  await servo.toPoint(IKK({ x, y, z }), via, { relax: false, vMaxDegPerSec: 10 })
+  await servo.toPoint(IKK({ x, y, z }), via, { vMaxDegPerSec, relax: false })
 }
 
 /**
@@ -104,12 +95,12 @@ const search = async (to, options) => {
  * @param {string} toNotation
  * @param {keyof Figures} figure
  * @param {{
- *   liftLength?: number
+ *   elevation?: number
  * }} [options] 
  */
 const move = async (fromNotation, toNotation, figure, options) => {
   const {
-    liftLength = 50,
+    elevation = 100,
   } = options ?? {}
   const height = config.figures[figure].height
   const from = notationToPosition(fromNotation)
@@ -120,16 +111,17 @@ const move = async (fromNotation, toNotation, figure, options) => {
   Object.assign(to, {
     z: to.z + height
   })
-  await descent(from, { vMaxDegPerSec: 30, delay: 2000 })
+  await descent(from, { vMaxDegPerSec: 60, elevation, delay: 2000 })
   await sleep(1000)
   await grab()
+  await search(from, { delta: 5, vMaxDegPerSec: 20 })
   await sleep(1000)
-  await lift(from, { liftLength })
+  await lift(from, { elevation })
   await sleep(1000)
-  await descent(to, { vMaxDegPerSec: 15, delay: 3000 })
+  await descent(to, { vMaxDegPerSec: 45, elevation, delay: 3000 })
   await sleep(1000)
   await release()
-  await lift(to, { liftLength })
+  await lift(to, { elevation })
   await servo.toPoint(servo.getPosition('home'), [], { relax: true })
 }
 

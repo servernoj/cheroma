@@ -271,10 +271,9 @@ const pathPlanner = (from, to, options) => {
 const toPoint = async (toPosition, via = [], options) => {
   const {
     relax = true,
-    dtMs = 5,
-    vMaxDegPerSec = 45,
+    vMaxDegPerSec = 60,
   } = options ?? {}
-
+  const dtMs = config.driver.dtMs
   const { points } = [...via, toPosition].reduce(
     (acc, next, idx) => {
       const segmentPoints = pathPlanner(
@@ -331,18 +330,18 @@ const toPoint = async (toPosition, via = [], options) => {
  * @param {KinematicsOutput} start 
  * @param {KinematicsOutput} delta 
  * @param {{
- *   dtMs?: number
  *   maxSpeed?: number
  * }} [options] 
  */
 const line = async (start, delta, options) => {
   const {
-    dtMs = 20,
-    // millimeter per second
-    maxSpeed = 3
+    maxSpeed = 100
   } = options ?? {}
+  const dtMs = config.driver.dtMs * 2
+  const dtSec = dtMs / 1000
   const maxDistance = Math.max(...Object.values(delta).map(Math.abs))
-  const N = Math.round(maxDistance / maxSpeed)
+  const T = Math.round(maxDistance / maxSpeed)
+  const N = Math.max(2, Math.ceil(T / dtSec) + 1)
   const denom = N - 1
   const points = Array(N).fill().map(
     (_, idx) => {
@@ -366,6 +365,7 @@ const line = async (start, delta, options) => {
     }
   )
   let nextTick = performance.now() + dtMs
+  let slackCounter = 0
   for (const { point, setChannelsData } of points) {
     await setChannels(setChannelsData)
     currentPosition = point
@@ -374,11 +374,15 @@ const line = async (start, delta, options) => {
     if (slack > 0) {
       await sleep(slack)
       nextTick += dtMs
+      slackCounter++
     } else {
       nextTick = now + dtMs
     }
   }
-
+  if (config.options.debug) {
+    // The higher the number reported the better. Ideally 100% means that every step has a slack to sleep for. 
+    console.log(`Slacked motion ratio: ${Math.round(slackCounter / points.length * 100)}%`)
+  }
 }
 
 export {
