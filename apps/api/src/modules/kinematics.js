@@ -74,21 +74,6 @@ const FK_ = ({ q0, q1, q2, q3 }, gamma) => {
     L2 * Math.sin(d2r(q1 + q2)) +
     L3 * Math.sin(d2r(gamma))
   )
-  const t = [
-    Math.sin(d2r(gamma)) * Math.cos(d2r(q0)),
-    Math.sin(d2r(gamma)) * Math.sin(d2r(q0)),
-    Math.cos(d2r(gamma))
-  ]
-  const v = [
-    -Math.sin(d2r(q0)),
-    Math.cos(d2r(q0)),
-    0
-  ]
-  const u = [
-    Math.cos(d2r(q0)) * Math.cos(d2r(gamma)),
-    Math.sin(d2r(q0)) * Math.cos(d2r(gamma)),
-    -Math.sin(d2r(gamma))
-  ]
   const p = [
     r * Math.cos(d2r(q0)),
     r * Math.sin(d2r(q0)),

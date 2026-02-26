@@ -37,12 +37,16 @@ const descent = async (to, options) => {
     ...to,
     z: to.z + elevation
   }
+  const logPoint = IKK(to)
+  console.log(Object.values(logPoint).map(v => Math.round(v * 100) / 100))
+
   await servo.toPoint(IKK(preTarget), [], {
     relax: false,
     vMaxDegPerSec
   })
   await sleep(delay)
   await servo.line(preTarget, { x: 0, y: 0, z: -elevation })
+  await servo.doRelax()
 }
 
 /**
@@ -148,8 +152,11 @@ const notationToPosition = notation => {
   return { x, y, z }
 }
 
-const home = async () => {
-  await servo.toPoint(servo.getPosition('home'))
+/**
+ * @param {*} [options]
+ */
+const home = async (options) => {
+  await servo.toPoint(servo.getPosition('home'), options)
 }
 
 export {

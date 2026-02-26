@@ -2,6 +2,7 @@ import express from 'express'
 import * as board from '@/modules/board.js'
 import { validator } from '@/controller/mw/index.js'
 import z from 'zod'
+import { sleep } from '@/modules/utils.js'
 
 const router = express.Router()
 
@@ -33,11 +34,12 @@ router.post(
     const { to, height } = res.locals.parsed.body
     const { x, y, z } = board.notationToPosition(to)
     await board.home()
+    await sleep(1000)
     await board.descent({
       x,
       y,
       z: z + height
-    }, { delay: 1000 })
+    }, { delay: 2000, vMaxDegPerSec: 30 })
     res.sendStatus(200)
   }
 )
