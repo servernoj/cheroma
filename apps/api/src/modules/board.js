@@ -146,8 +146,16 @@ const notationToPosition = notation => {
   if (!rank || !file) {
     throw new Error(`Invalid notation: ${notation}, must match /^[a-h][1-8]$/`)
   }
-  const x = Math.round(originOffset[0] + (Number(rank) - 1) * cellSize + cellSize * 0.5)
-  const y = Math.round(originOffset[1] - (file.charCodeAt(0) - 'a'.charCodeAt(0)) * cellSize - cellSize * 0.5)
+  // correction to address non-square shapes of cells in 4th rank
+  const fileIdx = file.charCodeAt(0) - 'a'.charCodeAt(0)
+  const rankNum = Number(rank)
+  const deficit = 2 - fileIdx * 1 / 7
+  const xCorrection = rankNum > 3
+    ? -deficit * (rankNum > 4 ? 1 : 0.5)
+    : 0
+  // --
+  const x = Math.round(originOffset[0] + (rankNum - 1) * cellSize + cellSize * 0.5 + xCorrection)
+  const y = Math.round(originOffset[1] - fileIdx * cellSize - cellSize * 0.5)
   const z = originOffset[2]
   return { x, y, z }
 }
