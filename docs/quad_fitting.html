@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quadratic Joint Correction – Inversion</title>
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+<style>
+  :root { color-scheme: light; }
+  body {
+    max-width: 720px;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.7;
+    color: #1a1a1a;
+    background: #fdfdfd;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid #333; padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2rem; }
+  .eq {
+    background: #f4f4f0;
+    border-left: 3px solid #888;
+    padding: .8rem 1.2rem;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+  code { background: #eee; padding: .15em .35em; border-radius: 3px; font-size: .9em; }
+</style>
+</head>
+<body>
+
+<h1>Quadratic Joint Correction – Inversion</h1>
+
+<h2>1. Forward model</h2>
+<p>The quadratic joint correction maps commanded angles to actual angles:</p>
+<div class="eq">
+$$Q_{\text{act}} = c_2 \cdot Q_{\text{cmd}}^{\,2} + a \cdot Q_{\text{cmd}} + b$$
+</div>
+
+<h2>2. Inversion problem</h2>
+<p>Given a desired angle $Q_{\text{des}}$, find $Q_{\text{cmd}}$ such that $Q_{\text{act}} = Q_{\text{des}}$:</p>
+<div class="eq">
+$$c_2 \cdot Q_{\text{cmd}}^{\,2} + a \cdot Q_{\text{cmd}} + (b - Q_{\text{des}}) = 0$$
+</div>
+
+<h2>3. Quadratic formula</h2>
+<p>Discriminant:</p>
+<div class="eq">
+$$d = a^2 - 4\,c_2\,(b - Q_{\text{des}}) = a^2 + 4\,c_2\,(Q_{\text{des}} - b)$$
+</div>
+<p>The physically meaningful root (the one near the linear solution):</p>
+<div class="eq">
+$$Q_{\text{cmd}} = \frac{-a + \sqrt{d}}{2\,c_2}$$
+</div>
+
+<h2>4. Numerically stable form</h2>
+<p>
+When $c_2$ is small, the formula above suffers from catastrophic cancellation
+($-a + \sqrt{d}$ subtracts two nearly equal values). Multiplying numerator and
+denominator by the conjugate:
+</p>
+<div class="eq">
+$$\frac{-a + \sqrt{d}}{2\,c_2}
+= \frac{(-a + \sqrt{d})(a + \sqrt{d})}{2\,c_2\,(a + \sqrt{d})}
+= \frac{d - a^2}{2\,c_2\,(a + \sqrt{d})}
+= \frac{4\,c_2\,(Q_{\text{des}} - b)}{2\,c_2\,(a + \sqrt{d})}$$
+</div>
+<p>which simplifies to:</p>
+<div class="eq">
+$$\boxed{\;Q_{\text{cmd}} = \frac{2\,(Q_{\text{des}} - b)}{a + \sqrt{a^2 + 4\,c_2\,(Q_{\text{des}} - b)}}\;}$$
+</div>
+
+<h2>5. Graceful fallback to linear</h2>
+<p>When $c_2 = 0$:</p>
+<div class="eq">
+$$Q_{\text{cmd}} = \frac{2\,(Q_{\text{des}} - b)}{a + \sqrt{a^2}}
+= \frac{2\,(Q_{\text{des}} - b)}{a + a}
+= \frac{Q_{\text{des}} - b}{a}$$
+</div>
+<p>This is exactly the current linear inversion formula.</p>
+
+</body>
+</html>
