@@ -8,10 +8,10 @@
     "dtMs": 5
   },
   "fitting": {
-    "roll": 0.1303,
-    "pitch": 4.4822,
-    "yaw": 1.8505,
-    "t": [ -18.4409,-0.5996, 9.1851]
+    "roll": 0,
+    "pitch": 0,
+    "yaw": 0,
+    "t": [ 0,0,0]
   },
   "servos": {
     "base": {
@@ -41,8 +41,8 @@
         [ -90.0, 850 ]
       ],
       "fitting": {
-        "scale": 0.9383, 
-        "offset": 0.0757
+        "scale": 1, 
+        "offset": 0
       },
       "home": 0,
       "init": 0,
@@ -72,8 +72,8 @@
         [-115.7, 2400]
       ],
       "fitting": {
-        "scale": 0.9525, 
-        "offset": -0.5144
+        "scale": 1, 
+        "offset": 0
       },
       "home": 0,
       "init": -90,
@@ -107,8 +107,8 @@
         [174.4,2450]
       ],
       "fitting": {
-        "scale": 0.9386, 
-        "offset": 8.0523
+        "scale": 1, 
+        "offset": 0
       },
       "home": 90,
       "init": 170,

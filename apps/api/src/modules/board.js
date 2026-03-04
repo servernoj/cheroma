@@ -132,9 +132,15 @@ const move = async (fromNotation, toNotation, figure, options) => {
 /**
  * Takes chess board notation, e.g. `c3` and returns `{x,y,z}` of the cell center at board height
  * @param {string} notation
+ * @param {{
+ *   correction?: boolean
+ * }} [options]
  * @returns {KinematicsOutput}
  */
-const notationToPosition = notation => {
+const notationToPosition = (notation, options) => {
+  const {
+    correction = false
+  } = options ?? {}
   const { originOffset, cellSize } = config.board
   if (
     typeof notation !== 'string' ||
@@ -150,7 +156,7 @@ const notationToPosition = notation => {
   const fileIdx = file.charCodeAt(0) - 'a'.charCodeAt(0)
   const rankNum = Number(rank)
   const deficit = 2 - fileIdx * 1 / 7
-  const xCorrection = rankNum > 3
+  const xCorrection = correction && rankNum > 3
     ? -deficit * (rankNum > 4 ? 1 : 0.5)
     : 0
   // --
