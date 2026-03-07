@@ -1,3 +1,4 @@
 *.lck
 *auto_saved_files*
 fp-info-cache
+*.stl
