@@ -3,9 +3,17 @@
     "debug": false
   },
   "units": { "pulse": "us", "angle": "deg", "length": "mm" },
-  "driver": {
-    "freq": 250,
-    "dtMs": 5
+  "drivers": {
+    "pca9685": {
+      "address": 64,
+      "freq": 250,
+      "dtMs": 5
+    },
+    "mcp23017": {
+      "addresses": [
+        32
+      ]
+    }
   },
   "fitting": {
     "roll": 0,

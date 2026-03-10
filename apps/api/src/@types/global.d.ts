@@ -61,9 +61,17 @@ declare global {
       short: string
     }
   }
-  type Driver = {
-    dtMs: number
+  type Pca9685Config = {
+    address: number
     freq: number
+    dtMs: number
+  }
+  type Mcp23017Config = {
+    addresses: number[]
+  }
+  type DriversConfig = {
+    pca9685: Pca9685Config
+    mcp23017: Mcp23017Config
   }
   type Options = {
     debug: boolean
@@ -80,7 +88,7 @@ declare global {
     fitting: Fitting
     board: Board
     figures: Figures
-    driver: Driver
+    drivers: DriversConfig
   }
 }
 

@@ -1,7 +1,5 @@
 import i2c from '@/i2c-stub.js'
 
-const deviceAddr = 0x40
-
 /**
  * Sleep for specified number of milliseconds
  * @param {number} ms Sleep time
@@ -33,10 +31,11 @@ const getBus = () => {
 /**
  * Write to an I2C register
  * @param {number} regAddr Register address (0x00-0xFF)
- * @param {Buffer} data Data to write (Buffer or array of bytes)
+ * @param {Buffer|number[]} data Data to write (Buffer or array of bytes)
+ * @param {number} deviceAddr I2C device address (e.g. 0x40 for PCA9685)
  * @returns {Promise<void>}
  */
-const writeRegister = async (regAddr, data) => {
+const writeRegister = async (regAddr, data, deviceAddr) => {
   const bus = await getBus()
   const buffer = Buffer.from([
     regAddr,

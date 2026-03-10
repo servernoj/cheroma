@@ -4,7 +4,8 @@ import { queryTypes, fallback, errorHandler } from '@/controller/mw/index.js'
 import servo from '@/controller/servo.js'
 import arm from '@/controller/arm.js'
 import board from '@/controller/board.js'
-import { init as driverInit } from '@/modules/driver.js'
+import { init as driverInit } from '@/modules/drivers/PCA9685.js'
+import { init as mcp23017Init } from '@/modules/drivers/MCP23017.js'
 import { getPosition, toPoint } from '@/modules/servo.js'
 import { closeBus } from '@/modules/utils.js'
 
@@ -25,6 +26,7 @@ export default async () => {
   app.listen(3000, async () => {
     console.log('Server started')
     await driverInit()
+    await mcp23017Init()
   })
   const getShutdownHandler = (signal) => {
     const handler = async () => {

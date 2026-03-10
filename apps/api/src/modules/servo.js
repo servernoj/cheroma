@@ -1,7 +1,7 @@
 import { sleep, writeRegister } from './utils.js'
 import { IK, toModel, K2S } from '@/modules/kinematics.js'
 import config from '@/config.json' with {type: 'json'}
-import { freq, REGS } from '@/modules/driver.js'
+import * as PCA9685 from '@/modules/drivers/PCA9685.js'
 import { performance } from 'node:perf_hooks'
 
 // Servo names as array
@@ -118,20 +118,20 @@ const setChannel = async ({ channel, pulseWidthUs }) => {
     0,
     Math.min(
       4095,
-      Math.round(pulseWidthUs * freq * 4096 / 1e6)
+      Math.round(pulseWidthUs * PCA9685.freq * 4096 / 1e6)
     )
   )
   if (offTicks === 0) {
-    await writeRegister(REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, 0x00, 0x10]))
+    await writeRegister(PCA9685.REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, 0x00, 0x10]), PCA9685.deviceAddr)
     return
   }
   if (offTicks >= 4095) {
-    await writeRegister(REGS.BASE + 4 * channel, Buffer.from([0x00, 0x10, 0x00, 0x00]))
+    await writeRegister(PCA9685.REGS.BASE + 4 * channel, Buffer.from([0x00, 0x10, 0x00, 0x00]), PCA9685.deviceAddr)
     return
   }
   const off = Buffer.alloc(2)
   off.writeUInt16LE(offTicks)
-  await writeRegister(REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, ...off]))
+  await writeRegister(PCA9685.REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, ...off]), PCA9685.deviceAddr)
 }
 
 /**
@@ -155,7 +155,7 @@ const setChannels = async (channels) => {
           0,
           Math.min(
             4095,
-            Math.round(pulseWidthUs * freq * 4096 / 1e6)
+            Math.round(pulseWidthUs * PCA9685.freq * 4096 / 1e6)
           )
         )
         off.writeUInt16LE(offTicks)
@@ -165,7 +165,7 @@ const setChannels = async (channels) => {
     },
     Buffer.from([])
   )
-  await writeRegister(REGS.BASE + 4 * sortedChannels[0].channel, writeData)
+  await writeRegister(PCA9685.REGS.BASE + 4 * sortedChannels[0].channel, writeData, PCA9685.deviceAddr)
 }
 
 /**
@@ -273,7 +273,7 @@ const toPoint = async (toPosition, via = [], options) => {
     relax = true,
     vMaxDegPerSec = 60,
   } = options ?? {}
-  const dtMs = config.driver.dtMs
+  const dtMs = config.drivers.pca9685.dtMs
   const { points } = [...via, toPosition].reduce(
     (acc, next, idx) => {
       const segmentPoints = pathPlanner(
@@ -337,7 +337,7 @@ const line = async (start, delta, options) => {
   const {
     maxSpeed = 100
   } = options ?? {}
-  const dtMs = config.driver.dtMs * 2
+  const dtMs = config.drivers.pca9685.dtMs * 2
   const dtSec = dtMs / 1000
   const maxDistance = Math.max(...Object.values(delta).map(Math.abs))
   const T = Math.round(maxDistance / maxSpeed)
