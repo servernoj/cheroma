@@ -26,7 +26,7 @@ const getInterruptFlag = () => interruptFlag
  * @returns {void}
  */
 const startWatch = () => {
-  gpio = new Gpio(intPin, 'in', 'both')
+  gpio = new Gpio(intPin, 'in', 'both', { bias: 'pull-up' })
   gpio.watch((err, value) => {
     if (!err) interruptFlag = value === 1 ? false : true
   })
