@@ -69,9 +69,13 @@ declare global {
   type Mcp23017Config = {
     addresses: number[]
   }
+  type GpioConfig = {
+    intPin?: number
+  }
   type DriversConfig = {
     pca9685: Pca9685Config
     mcp23017: Mcp23017Config
+    gpio: GpioConfig
   }
   type Options = {
     debug: boolean

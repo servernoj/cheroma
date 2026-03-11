@@ -8,10 +8,14 @@
  * - Interrupt when pin differs from DEFVAL: INTCON=0xFF, DEFVAL=0x00 (idle = 0 after inversion)
  * - Interrupt enable on all pins (GPINTEN=0xFF)
  */
-import { writeRegister } from '@/modules/utils.js'
+import { writeRegister, readRegister } from '@/modules/utils.js'
 import config from '@/config.json' with { type: 'json' }
 
-const addresses = config.drivers.mcp23017?.addresses ?? []
+const mcp23017Config = config.drivers?.mcp23017
+if (!Array.isArray(mcp23017Config?.addresses) || mcp23017Config.addresses.length === 0) {
+  throw new Error('config.drivers.mcp23017.addresses must be a non-empty array')
+}
+const addresses = mcp23017Config.addresses
 
 const R = {
   IODIR: 0x00,
@@ -20,7 +24,8 @@ const R = {
   GPPU: 0x0c,
   INTCON: 0x08,
   DEFVAL: 0x06,
-  GPINTEN: 0x04
+  GPINTEN: 0x04,
+  GPIO: 0x12
 }
 
 const IOCON_SEQOP_MIRROR_ODR = 0b01000100
@@ -48,4 +53,14 @@ const init = async () => {
   }
 }
 
-export { init, addresses, R }
+/**
+ * Read GPIO port A and B from one MCP23017 unit (sequential read, 2 bytes).
+ * @param {number} addr I2C address
+ * @returns {Promise<{ portA: number, portB: number }>}
+ */
+const readGPIO = async (addr) => {
+  const buf = await readRegister(R.GPIO, 2, addr)
+  return { portA: buf[0], portB: buf[1] }
+}
+
+export { init, addresses, R, readGPIO }

@@ -9,6 +9,7 @@ if (os.platform() === 'linux') {
       readByte: async () => 0,
       writeByte: async () => { },
       i2cWrite: async () => { },
+      i2cRead: async () => { },
       close: async () => { },
     }),
   }

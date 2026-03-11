@@ -45,6 +45,21 @@ const writeRegister = async (regAddr, data, deviceAddr) => {
 }
 
 /**
+ * Read from an I2C register (sets register pointer then reads)
+ * @param {number} regAddr Register address (0x00-0xFF)
+ * @param {number} byteLength Number of bytes to read
+ * @param {number} deviceAddr I2C device address
+ * @returns {Promise<Buffer>}
+ */
+const readRegister = async (regAddr, byteLength, deviceAddr) => {
+  const bus = await getBus()
+  await bus.i2cWrite(deviceAddr, 1, Buffer.from([regAddr]))
+  const buf = Buffer.alloc(byteLength)
+  await bus.i2cRead(deviceAddr, byteLength, buf)
+  return buf
+}
+
+/**
  * Close i2c bus handler
  */
 const closeBus = async () => {
@@ -207,6 +222,7 @@ export {
   mOp,
   sleep,
   writeRegister,
+  readRegister,
   throttler,
   closeBus
 }

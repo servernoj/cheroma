@@ -13,6 +13,9 @@
       "addresses": [
         32
       ]
+    },
+    "gpio": {
+      "intPin": 27
     }
   },
   "fitting": {
