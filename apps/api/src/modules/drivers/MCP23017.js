@@ -46,10 +46,12 @@ const initUnit = async (addr) => {
 
 /**
  * Initializes all MCP23017 units (addresses from config.drivers.mcp23017.addresses)
+ * and reads GPIO on each to clear any pending interrupt (releases INTA/INTB).
  */
 const init = async () => {
   for (const addr of addresses) {
     await initUnit(addr)
+    await readGPIO(addr)
   }
 }
 

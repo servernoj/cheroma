@@ -1,6 +1,6 @@
 {
   "options": {
-    "debug": false
+    "debug": true
   },
   "units": { "pulse": "us", "angle": "deg", "length": "mm" },
   "drivers": {
