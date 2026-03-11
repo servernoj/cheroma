@@ -24,6 +24,7 @@ declare module '@/gpio-stub.js' {
       edge?: Edge,
       options?: GpioOptions
     ): Gpio
+    setChipRegex?(regex: string): void
     accessible?: boolean
   }
 

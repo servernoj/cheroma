@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "clean": "find . -type d -maxdepth 3 -name 'node_modules' | xargs rm -rf",
+    "clean": "find . -maxdepth 3 -type d -name 'node_modules' | xargs rm -rf",
     "start": "pnpm --stream -r run start",
     "dev": "pnpm --stream --parallel -r run dev",
     "lint": "pnpm --stream -r run lint",

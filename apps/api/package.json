@@ -29,7 +29,7 @@
     "zod": "^4.1.12"
   },
   "optionalDependencies": {
-    "@bratbit/onoff": "^1.0.3"
+    "@bratbit/onoff": "github:servernoj/onoff#v1.0.3-bias_support"
   },
   "aliases": {
     "@": "./src"

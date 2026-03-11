@@ -2,6 +2,7 @@
  * GPIO stub: real @bratbit/onoff on Linux, no-op mock elsewhere (e.g. macOS).
  * Use this instead of importing @bratbit/onoff directly so the app runs without
  * native GPIO on non-Linux.
+ * When using real onoff, call Gpio.setChipRegex(regex) before new Gpio(...) to override chip detection.
  */
 import os from 'os'
 
@@ -10,6 +11,7 @@ let Gpio
 /** Mock Gpio: constructor and methods no-op, no native dependency */
 class MockGpio {
   constructor (_gpio, _direction, _edge, _options) {}
+  static setChipRegex (_regex) {}
   watch (_callback) {}
   unwatchAll () {}
   close () {}
