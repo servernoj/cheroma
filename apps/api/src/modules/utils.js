@@ -216,6 +216,8 @@ const mTrans = (A) => {
   return C
 }
 
+const toBinary = (byte) => '0b' + (byte >>> 0).toString(2).padStart(8, '0')
+
 export {
   mMult,
   mTrans,
@@ -224,5 +226,6 @@ export {
   writeRegister,
   readRegister,
   throttler,
-  closeBus
+  closeBus,
+  toBinary
 }

@@ -10,12 +10,12 @@ let Gpio
 
 /** Mock Gpio: constructor and methods no-op, no native dependency */
 class MockGpio {
-  constructor (_gpio, _direction, _edge, _options) {}
-  static setChipRegex (_regex) {}
-  watch (_callback) {}
-  unwatchAll () {}
-  close () {}
-  get unexport () {
+  constructor(_gpio, _direction, _edge, _options) { }
+  static setChipRegex(_regex) { }
+  watch(_callback) { }
+  unwatchAll() { }
+  close() { }
+  get unexport() {
     return this.close.bind(this)
   }
 }
@@ -24,8 +24,9 @@ if (os.platform() === 'linux') {
   try {
     const onoff = await import('@bratbit/onoff')
     Gpio = onoff.Gpio
-  } catch {
+  } catch (e) {
     Gpio = MockGpio
+    console.error(e.message)
   }
 } else {
   Gpio = MockGpio

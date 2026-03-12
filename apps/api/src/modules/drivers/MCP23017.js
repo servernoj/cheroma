@@ -25,7 +25,8 @@ const R = {
   INTCON: 0x08,
   DEFVAL: 0x06,
   GPINTEN: 0x04,
-  GPIO: 0x12
+  GPIO: 0x12,
+  INTCAP: 0x10
 }
 
 const IOCON_SEQOP_MIRROR_ODR = 0b01000100
@@ -51,18 +52,12 @@ const initUnit = async (addr) => {
 const init = async () => {
   for (const addr of addresses) {
     await initUnit(addr)
-    await readGPIO(addr)
+    await readRegister(R.GPIO, 2, addr)
   }
 }
 
-/**
- * Read GPIO port A and B from one MCP23017 unit (sequential read, 2 bytes).
- * @param {number} addr I2C address
- * @returns {Promise<{ portA: number, portB: number }>}
- */
-const readGPIO = async (addr) => {
-  const buf = await readRegister(R.GPIO, 2, addr)
-  return { portA: buf[0], portB: buf[1] }
+export {
+  init,
+  addresses,
+  R
 }
-
-export { init, addresses, R, readGPIO }

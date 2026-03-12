@@ -15,10 +15,19 @@ let interruptFlag = false
 
 /**
  * Whether an interrupt is currently asserted (INT line low since last rising edge).
- * Cleared automatically when the INT line goes high again (rising edge).
+ * Cleared automatically when the INT line goes high again (rising edge), or by clearInterruptFlag() after consuming.
  * @returns {boolean}
  */
 const getInterruptFlag = () => interruptFlag
+
+/**
+ * Clear the interrupt flag. Call after reading MCP GPIO so the next poll cycle doesn't see a stale true
+ * (the callback that clears on rising edge may run after we've already returned the response).
+ * @returns {void}
+ */
+const clearInterruptFlag = () => {
+  interruptFlag = false
+}
 
 /**
  * Start watching the interrupt GPIO pin (both edges). Sets flag on falling edge,
@@ -28,7 +37,12 @@ const getInterruptFlag = () => interruptFlag
 const startWatch = () => {
   gpio = new Gpio(intPin, 'in', 'both', { bias: 'pull-up' })
   gpio.watch((err, value) => {
-    if (!err) interruptFlag = value === 1 ? false : true
+    console.log('--------------', value)
+    if (!err) {
+      interruptFlag = value === 1 ? false : true
+    } else {
+      console.error(err)
+    }
   })
 }
 
@@ -41,7 +55,7 @@ const stopWatch = () => {
     try {
       if (typeof gpio.unwatchAll === 'function') gpio.unwatchAll()
       if (typeof gpio.close === 'function') gpio.close()
-    } catch (_) {
+    } catch {
       // -- NOP
     }
     gpio = null
@@ -49,4 +63,4 @@ const stopWatch = () => {
   interruptFlag = false
 }
 
-export { startWatch, stopWatch, getInterruptFlag, intPin }
+export { startWatch, stopWatch, getInterruptFlag, clearInterruptFlag, intPin }
