@@ -38,9 +38,11 @@ const runPollUntilInterrupt = async (timeoutSec) => {
   }
   for (const addr of addresses) {
     const key = `0x${addr.toString(16)}`
-    // combined read of INTF (0x0E) and INTCAP (0x10)
-    const buf = await readRegister(R.INTF, 4, addr)
-    result[key] = buf.readUint16LE() & buf.readUint16LE(2)
+    const buf = {
+      mask: await readRegister(R.INTF, 2, addr),
+      data: await readRegister(R.INTCAP, 2, addr)
+    }
+    result[key] = buf.mask.readUint16LE() & buf.data.readUint16LE(2)
   }
   while (gpio.getInterruptFlag()) {
     if (Date.now() >= deadline) return null
