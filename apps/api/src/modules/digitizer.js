@@ -24,6 +24,10 @@ import { readRegister } from '@/modules/utils.js'
  * @returns {Promise<Record<string, number> | null>} Per-address combined port data (key e.g. "0x20"), or null on timeout.
  */
 const runPollUntilInterrupt = async (timeoutSec) => {
+  // -- make sure there is no pending interrupt
+  for (const addr of addresses) {
+    await readRegister(R.GPIO, 2, addr)
+  }
   const deadline = Date.now() + timeoutSec * 1000
   /** @type {Record<string,number>} */
   const result = {}
@@ -34,8 +38,9 @@ const runPollUntilInterrupt = async (timeoutSec) => {
   }
   for (const addr of addresses) {
     const key = `0x${addr.toString(16)}`
-    const buf = await readRegister(R.INTCAP, 2, addr)
-    result[key] |= buf.readUint16LE()
+    // combined read of INTF (0x0E) and INTCAP (0x10)
+    const buf = await readRegister(R.INTF, 4, addr)
+    result[key] = buf.readUint16LE() & buf.readUint16LE(2)
   }
   while (gpio.getInterruptFlag()) {
     if (Date.now() >= deadline) return null

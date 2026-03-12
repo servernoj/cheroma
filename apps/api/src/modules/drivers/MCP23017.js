@@ -19,14 +19,15 @@ const addresses = mcp23017Config.addresses
 
 const R = {
   IODIR: 0x00,
-  IOCON: 0x0a,
+  IOCON: 0x0A,
   IPOL: 0x02,
-  GPPU: 0x0c,
+  GPPU: 0x0C,
   INTCON: 0x08,
   DEFVAL: 0x06,
   GPINTEN: 0x04,
   GPIO: 0x12,
-  INTCAP: 0x10
+  INTCAP: 0x10,
+  INTF: 0x0E
 }
 
 const IOCON_SEQOP_MIRROR_ODR = 0b01000100
