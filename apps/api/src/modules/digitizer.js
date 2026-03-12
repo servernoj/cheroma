@@ -42,7 +42,7 @@ const runPollUntilInterrupt = async (timeoutSec) => {
       mask: await readRegister(R.INTF, 2, addr),
       data: await readRegister(R.INTCAP, 2, addr)
     }
-    result[key] = buf.mask.readUint16LE() & buf.data.readUint16LE(2)
+    result[key] = buf.mask.readUint16LE() & buf.data.readUint16LE()
   }
   while (gpio.getInterruptFlag()) {
     if (Date.now() >= deadline) return null
