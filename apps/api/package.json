@@ -29,7 +29,7 @@
     "zod": "^4.1.12"
   },
   "optionalDependencies": {
-    "@bratbit/onoff": "github:servernoj/onoff#v1.0.3-memory_leak_fix"
+    "@bratbit/onoff": "github:servernoj/onoff#v1.0.4-memory_leak_fix"
   },
   "aliases": {
     "@": "./src"

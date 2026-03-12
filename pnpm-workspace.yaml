@@ -3,3 +3,4 @@ packages:
 
 onlyBuiltDependencies:
   - i2c-bus
+  - "@bratbit/onoff"
