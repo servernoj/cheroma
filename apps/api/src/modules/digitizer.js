@@ -6,11 +6,14 @@
  * All MCPs use open-drain INT wired OR together to one line (e.g. GPIO 27). The line stays
  * low until every chip has been read and released; the flag going false means no MCP is
  * driving the line low.
+ * To avoid contact bounce re-asserting INTA after we have cleared the flag, GPINTEN is
+ * disabled as soon as an interrupt is seen and re-enabled at the start of the next run
+ * (not before return), so INTA stays released when the response is sent.
  */
 import { sleep } from '@/modules/utils.js'
 import * as gpio from '@/modules/drivers/gpio.js'
 import { addresses, R } from '@/modules/drivers/MCP23017.js'
-import { readRegister } from '@/modules/utils.js'
+import { readRegister, writeRegister } from '@/modules/utils.js'
 
 /**
  * Poll every 10 ms until the interrupt flag is set or timeout. When flag is set:
@@ -24,7 +27,10 @@ import { readRegister } from '@/modules/utils.js'
  * @returns {Promise<Record<string, number> | null>} Per-address combined port data (key e.g. "0x20"), or null on timeout.
  */
 const runPollUntilInterrupt = async (timeoutSec) => {
-  // -- make sure there is no pending interrupt
+  //-- Re-enable interrupts (in case previous run left them disabled) and clear any pending
+  for (const addr of addresses) {
+    await writeRegister(R.GPINTEN, [0xff, 0xff], addr)
+  }
   for (const addr of addresses) {
     await readRegister(R.GPIO, 2, addr)
   }
@@ -35,6 +41,10 @@ const runPollUntilInterrupt = async (timeoutSec) => {
     await sleep(10)
     if (Date.now() >= deadline) return null
     if (gpio.getInterruptFlag()) break
+  }
+  //-- Disable MCP23017 interrupts so contact bounce during read-out cannot re-assert INTA
+  for (const addr of addresses) {
+    await writeRegister(R.GPINTEN, [0, 0], addr)
   }
   for (const addr of addresses) {
     const key = `0x${addr.toString(16)}`
