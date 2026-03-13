@@ -3,6 +3,9 @@
     "debug": true
   },
   "units": { "pulse": "us", "angle": "deg", "length": "mm" },
+  "digitizer": {
+    "elevationMm": 50
+  },
   "drivers": {
     "pca9685": {
       "address": 64,

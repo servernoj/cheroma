@@ -19,6 +19,45 @@ import { readRegister, writeRegister } from '@/modules/utils.js'
 const MULTI_TOUCH_WINDOW_MS = 12
 
 /**
+ * Clear any pending INT and re-enable GPINTEN on all MCPs. Call before a calibration run
+ * so the digitizer is ready to trigger on touch.
+ */
+const initDigitizerForCapture = async () => {
+  for (const addr of addresses) {
+    await readRegister(R.GPIO, 2, addr)
+    await writeRegister(R.GPINTEN, [0xff, 0xff], addr)
+  }
+}
+
+/**
+ * Wait MULTI_TOUCH_WINDOW_MS, then read INTF/INTCAP and drain GPIO until interrupt flag clears.
+ * Used by runPollUntilInterrupt (with deadline) and by calibration after an interrupt (no deadline).
+ * Does not disable GPINTEN.
+ * @param {{ deadline?: number }} [options] if deadline set, return null when passed (during drain loop)
+ * @returns {Promise<Record<string, number> | null>}
+ */
+const readAndDrainTouchData = async (options = {}) => {
+  await sleep(MULTI_TOUCH_WINDOW_MS)
+  /** @type {Record<string, number>} */
+  const result = {}
+  for (const addr of addresses) {
+    const key = `0x${addr.toString(16)}`
+    const buf = await readRegister(R.INTF, 6, addr)
+    result[key] = (buf.readUint16LE() & buf.readUint16LE(2)) | buf.readUint16LE(4)
+  }
+  do {
+    if (options.deadline != null && Date.now() >= options.deadline) return null
+    for (const addr of addresses) {
+      const key = `0x${addr.toString(16)}`
+      const buf = await readRegister(R.GPIO, 2, addr)
+      result[key] |= buf.readUint16LE()
+    }
+    await sleep(5)
+  } while (gpio.getInterruptFlag())
+  return result
+}
+
+/**
  * Poll every 10 ms until the interrupt flag is set or timeout. When flag is set:
  * 1) Read INTCAP (2 bytes) from each MCP and OR into result (capture what caused the interrupt).
  * 2) Do at least one pass reading GPIO from each MCP (OR into result), then repeat while the flag
@@ -30,39 +69,59 @@ const MULTI_TOUCH_WINDOW_MS = 12
  * @returns {Promise<Record<string, number> | null>} Per-address combined port data (key e.g. "0x20"), or null on timeout.
  */
 const runPollUntilInterrupt = async (timeoutSec) => {
-  // Clear any pending INT per chip, then re-enable interrupts (in case previous run left them disabled)
-  for (const addr of addresses) {
-    await readRegister(R.GPIO, 2, addr)
-    await writeRegister(R.GPINTEN, [0xff, 0xff], addr)
-  }
+  await initDigitizerForCapture()
   const deadline = Date.now() + timeoutSec * 1000
-  /** @type {Record<string,number>} */
-  const result = {}
   for (; ;) {
     await sleep(10)
     if (Date.now() >= deadline) return null
     if (gpio.getInterruptFlag()) break
   }
-  await sleep(MULTI_TOUCH_WINDOW_MS)
-  for (const addr of addresses) {
-    const key = `0x${addr.toString(16)}`
-    const buf = await readRegister(R.INTF, 6, addr)
-    result[key] = (buf.readUint16LE() & buf.readUint16LE(2)) | buf.readUint16LE(4)
-  }
-  do {
-    if (Date.now() >= deadline) return null
-    for (const addr of addresses) {
-      const key = `0x${addr.toString(16)}`
-      const buf = await readRegister(R.GPIO, 2, addr)
-      result[key] |= buf.readUint16LE()
-    }
-    await sleep(5)
-  } while (gpio.getInterruptFlag())
-  // Disable MCP23017 interrupts so contact bounce after return cannot re-assert INTA
-  for (const addr of addresses) {
-    await writeRegister(R.GPINTEN, [0, 0], addr)
-  }
+  const result = await readAndDrainTouchData({ deadline })
+  if (result === null) return null
+  await disableDigitizerInterrupts()
   return result
 }
 
-export { runPollUntilInterrupt }
+/**
+ * Disable GPINTEN on all MCPs so the digitizer stops asserting INTA. Call at the end of
+ * a calibration run (or after runPollUntilInterrupt, which does this internally).
+ */
+const disableDigitizerInterrupts = async () => {
+  for (const addr of addresses) {
+    await writeRegister(R.GPINTEN, [0, 0], addr)
+  }
+}
+
+/**
+ * Read GPIO on all MCPs until the interrupt flag clears. Call after a touch so the next
+ * measurement does not see a stale flag.
+ */
+const clearDigitizerInterrupt = async () => {
+  while (gpio.getInterruptFlag()) {
+    for (const addr of addresses) {
+      await readRegister(R.GPIO, 2, addr)
+    }
+    await sleep(2)
+  }
+}
+
+/**
+ * Convert touch data (same shape as runPollUntilInterrupt / readAndDrainTouchData) to
+ * (x, y) in digitizer-local coordinates (mm from digitizer origin). Fill in the logic
+ * based on the digitizer pattern (which 4 pins map to row/col and the 4 cases).
+ * @param {Record<string, number>} touchData per-address port data (same shape as runPollUntilInterrupt / readAndDrainTouchData)
+ * @returns {{ x: number, y: number }} position relative to digitizer origin
+ */
+const touchDataToDigitizerXY = (touchData) => {
+  // TODO: implement from digitizer pattern (1r1c, 2r1c, 1r2c, 2r2c) → (x, y) in mm
+  return { x: 0, y: 0 }
+}
+
+export {
+  runPollUntilInterrupt,
+  clearDigitizerInterrupt,
+  initDigitizerForCapture,
+  disableDigitizerInterrupts,
+  readAndDrainTouchData,
+  touchDataToDigitizerXY
+}

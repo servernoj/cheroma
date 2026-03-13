@@ -5,6 +5,7 @@ import servo from '@/controller/servo.js'
 import arm from '@/controller/arm.js'
 import board from '@/controller/board.js'
 import digitizer from '@/controller/digitizer.js'
+import calibration from '@/controller/calibration.js'
 import { init as pca9685Init } from '@/modules/drivers/PCA9685.js'
 import { init as mcp23017Init } from '@/modules/drivers/MCP23017.js'
 import * as gpio from '@/modules/drivers/gpio.js'
@@ -22,6 +23,7 @@ export default async () => {
   app.use('/arm', arm)
   app.use('/board', board)
   app.use('/digitizer', digitizer)
+  app.use('/calibration', calibration)
 
   app.use(fallback)
   app.use(errorHandler)

@@ -27,6 +27,14 @@ const getPosition = (positionName) => Object.entries(config.servos).reduce(
 let currentPosition = getPosition('init')
 
 /**
+ * Set internal current position (e.g. after commanding angles outside toPoint/line).
+ * @param {ServoPosition} position
+ */
+const setCurrentPosition = (position) => {
+  currentPosition = { ...position }
+}
+
+/**
  * @param {number} angle Angle to interpolate pulseWidth for
  * @param {ServoCalPoint} begin Begin of the interpolation segment
  * @param {ServoCalPoint} end End of the interpolation segment
@@ -109,6 +117,18 @@ const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
 }
 
 const angleDegToPulseUs = angleDegToPulseUsFactory({ clamp: false })
+
+/**
+ * @param {ServoPosition} position joint angles in deg (keys = servo names)
+ * @returns {Array<{ channel: number, pulseWidthUs: number }>}
+ */
+const positionToSetChannelsData = (position) => Object.entries(position).map(
+  /** @param {*} arg*/
+  ([servoName, angleDeg]) => ({
+    channel: config.servos[servoName].channel,
+    pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
+  })
+)
 
 /**
  * @param {SetChannel} channel
@@ -287,18 +307,11 @@ const toPoint = async (toPosition, via = [], options) => {
       acc.last = next
       acc.points.push(
         ...segmentPoints.map(
-          point => {
-            const setChannelsData = Object.entries(point).map(
-              /** @param {*} arg*/
-              ([servoName, angleDeg]) => {
-                return {
-                  channel: config.servos[servoName].channel,
-                  pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
-                }
-              }
-            )
-            return { point, setChannelsData }
-          }
+          point => ({
+            point,
+            setChannelsData: positionToSetChannelsData(point)
+          })
+
         )
       )
       return acc
@@ -352,15 +365,7 @@ const line = async (start, delta, options) => {
       })))
       return {
         point,
-        setChannelsData: Object.entries(point).map(
-          /** @param {*} arg*/
-          ([servoName, angleDeg]) => {
-            return {
-              channel: config.servos[servoName].channel,
-              pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
-            }
-          }
-        )
+        setChannelsData: positionToSetChannelsData(point)
       }
     }
   )
@@ -387,6 +392,8 @@ const line = async (start, delta, options) => {
 
 export {
   getPosition,
+  setCurrentPosition,
+  positionToSetChannelsData,
   setChannel,
   setChannels,
   doRelax,
