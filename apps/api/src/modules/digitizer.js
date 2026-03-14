@@ -39,6 +39,7 @@ const initDigitizerForCapture = async () => {
  * @returns {Promise<Record<string, Array<number>> | null>}
  */
 const readAndDrainTouchData = async (options = {}) => {
+  await sleep(MULTI_TOUCH_WINDOW_MS)
   /** @type {Record<string, number>} */
   const valueByAddress = {}
   for (const addr of digitizer.addresses) {
@@ -97,7 +98,6 @@ const runPollUntilInterrupt = async (timeoutSec) => {
     if (Date.now() >= deadline) return null
     if (gpio.getInterruptFlag()) break
   }
-  await sleep(MULTI_TOUCH_WINDOW_MS)
   const result = await readAndDrainTouchData({ deadline })
   if (result === null) return null
   await disableDigitizerInterrupts()
@@ -127,16 +127,32 @@ const clearDigitizerInterrupt = async () => {
   }
 }
 
+
+
 /**
  * Convert touch data (same shape as runPollUntilInterrupt / readAndDrainTouchData) to
- * (x, y) in digitizer-local coordinates (mm from digitizer origin). Fill in the logic
- * based on the digitizer pattern (which 4 pins map to row/col and the 4 cases).
- * @param {Record<string, Array<number>>} touchData per-address port data (same shape as runPollUntilInterrupt / readAndDrainTouchData)
- * @returns {{ x: number, y: number }} position relative to digitizer origin
+ * (x, y) in digitizer-local coordinates (mm from digitizer origin).
+ * touchData is { r: number[], c: number[] }
+ * @param {{ r?: number[], c?: number[] }} touchData bits-by-target from `readAndDrainTouchData`
+ * @returns {{ x: number, y: number }} position relative to digitizer origin (y from cols, x from rows)
  */
 const touchDataToDigitizerXY = (touchData) => {
-  // TODO: implement from digitizer pattern (1r1c, 2r1c, 1r2c, 2r2c) → (x, y) in mm
-  return { x: 0, y: 0 }
+  const PITCH_MM = 5.08
+  const rows = touchData.r ?? []
+  const cols = touchData.c ?? []
+  if (
+    rows.length === 0 ||
+    rows.length > 2 ||
+    rows.length === 2 && Math.abs(rows[1] - rows[0]) !== 1 ||
+    cols.length === 0 ||
+    cols.length > 2 ||
+    cols.length === 2 && Math.abs(cols[1] - cols[0]) !== 1
+  ) {
+    throw new Error('Calibration: touch coordinates cannot be determined')
+  }
+  const rowCenter = rows.reduce((a, b) => a + b, 0) / rows.length
+  const colCenter = cols.reduce((a, b) => a + b, 0) / cols.length
+  return { y: colCenter * PITCH_MM, x: rowCenter * PITCH_MM }
 }
 
 export {

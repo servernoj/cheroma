@@ -4,8 +4,8 @@ import { keyBy, map } from 'lodash-es'
 
 const addresses = config?.drivers?.digitizer?.mcp23017?.map(({ address }) => address) ?? []
 
-if (!Array.isArray(addresses) || addresses.length === 0) {
-  throw new Error('config.drivers.mcp23017.addresses must be a non-empty array')
+if (addresses.length === 0) {
+  throw new Error('config.drivers.digitizer.mcp23017 must be a non-empty array')
 }
 
 const unitByAddress = keyBy(config.drivers.digitizer.mcp23017, ({ address }) => `0x${address.toString(16)}`)
