@@ -7,7 +7,7 @@ import board from '@/controller/board.js'
 import digitizer from '@/controller/digitizer.js'
 import calibration from '@/controller/calibration.js'
 import { init as pca9685Init } from '@/modules/drivers/PCA9685.js'
-import { init as mcp23017Init } from '@/modules/drivers/MCP23017.js'
+import { init as digitizerInit } from '@/modules/drivers/digitizer.js'
 import * as gpio from '@/modules/drivers/gpio.js'
 import { getPosition, toPoint } from '@/modules/servo.js'
 import { closeBus } from '@/modules/utils.js'
@@ -31,7 +31,7 @@ export default async () => {
   app.listen(3000, async () => {
     console.log('Server started')
     await pca9685Init()
-    await mcp23017Init()
+    await digitizerInit()
     gpio.startWatch()
   })
   const getShutdownHandler = (signal) => {

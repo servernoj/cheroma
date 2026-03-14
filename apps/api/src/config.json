@@ -3,22 +3,29 @@
     "debug": true
   },
   "units": { "pulse": "us", "angle": "deg", "length": "mm" },
-  "digitizer": {
-    "elevationMm": 50
-  },
   "drivers": {
     "pca9685": {
       "address": 64,
       "freq": 250,
       "dtMs": 5
     },
-    "mcp23017": {
-      "addresses": [
-        32
-      ]
-    },
     "gpio": {
       "intPin": 27
+    },
+    "digitizer": {
+      "elevation": 50,
+      "mcp23017": [
+        {
+          "address": 32,
+          "target": "r",
+          "offset": 0
+        },
+        {
+          "address": 33,
+          "target": "c",
+          "offset": 16
+        }
+      ]
     }
   },
   "fitting": {

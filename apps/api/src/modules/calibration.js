@@ -85,7 +85,7 @@ const runInterruptibleDescent = async (points) => {
  * @returns {Promise<number[][]>} one row per position: [q0, q1, q2, q3, x, y, z]
  */
 const runCalibrationSequence = async (origin, grid, stepMm) => {
-  const elevationMm = config.digitizer?.elevationMm ?? 50
+  const elevationMm = config.drivers.digitizer?.elevation ?? 50
   const [ox, oy, oz] = origin
   const { rows, cols } = grid
   const halfStep = stepMm / 2

@@ -1,21 +1,16 @@
-/**
- * MCP23017 16-bit I/O expander driver.
- * Bank 0 register map. Configuration:
- * - All pins as inputs (IODIRA=IODIRB=0xFF)
- * - Sequential mode (IOCON.SEQOP=0), open-drain interrupts (ODR=1), OR INTA/INTB (MIRROR=1)
- * - Inverted polarity (IPOL=0xFF): read 1 = pin grounded (active), 0 = pulled up (idle)
- * - Pull-ups on all pins (GPPU=0xFF)
- * - Interrupt when pin differs from DEFVAL: INTCON=0xFF, DEFVAL=0x00 (idle = 0 after inversion)
- * - Interrupt enable on all pins (GPINTEN=0xFF)
- */
 import { writeRegister, readRegister } from '@/modules/utils.js'
 import config from '@/config.json' with { type: 'json' }
+import { keyBy, map } from 'lodash-es'
 
-const mcp23017Config = config.drivers?.mcp23017
-if (!Array.isArray(mcp23017Config?.addresses) || mcp23017Config.addresses.length === 0) {
+const addresses = config?.drivers?.digitizer?.mcp23017?.map(({ address }) => address) ?? []
+
+if (!Array.isArray(addresses) || addresses.length === 0) {
   throw new Error('config.drivers.mcp23017.addresses must be a non-empty array')
 }
-const addresses = mcp23017Config.addresses
+
+const unitByAddress = keyBy(config.drivers.digitizer.mcp23017, ({ address }) => `0x${address.toString(16)}`)
+
+const targets = [...new Set(map(config.drivers.digitizer.mcp23017, 'target'))]
 
 const R = {
   IODIR: 0x00,
@@ -47,7 +42,7 @@ const initUnit = async (addr) => {
 }
 
 /**
- * Initializes all MCP23017 units (addresses from config.drivers.mcp23017.addresses)
+ * Initializes all MCP23017 units
  * and reads GPIO on each to clear any pending interrupt (releases INTA/INTB).
  */
 const init = async () => {
@@ -60,5 +55,7 @@ const init = async () => {
 export {
   init,
   addresses,
+  unitByAddress,
+  targets,
   R
 }

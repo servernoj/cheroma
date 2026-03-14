@@ -67,15 +67,21 @@ declare global {
     dtMs: number
   }
   type Mcp23017Config = {
-    addresses: number[]
+    addresse: number,
+    target: 'r' | 'c',
+    offset: 0 | 16
   }
   type GpioConfig = {
     intPin?: number
   }
-  type DriversConfig = {
+  type Digitizer = {
+    elevationMm: number,
+    mcp23017: Array<Mcp23017Config>
+  }
+  type Drivers = {
     pca9685: Pca9685Config
-    mcp23017: Mcp23017Config
     gpio: GpioConfig
+    digitizer: Digitizer
   }
   type Options = {
     debug: boolean
@@ -92,7 +98,7 @@ declare global {
     fitting: Fitting
     board: Board
     figures: Figures
-    drivers: DriversConfig
+    drivers: Drivers
   }
 }
 

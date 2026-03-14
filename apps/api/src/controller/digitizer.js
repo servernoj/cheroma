@@ -1,6 +1,6 @@
 import express from 'express'
 import * as digitizer from '@/modules/digitizer.js'
-import { addresses as mcpAddresses } from '@/modules/drivers/MCP23017.js'
+import { addresses as mcpAddresses } from '@/modules/drivers/digitizer.js'
 import { readRegister, writeRegister } from '@/modules/utils.js'
 import { validator } from '@/controller/mw/index.js'
 import z from 'zod'
