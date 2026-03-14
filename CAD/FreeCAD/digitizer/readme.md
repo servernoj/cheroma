@@ -1,0 +1,5 @@
+The original design (file `base.FCStd`) of the digitizer case has an error related to how the origin of the digitizer pad, i.e. point in the middle of square outlined by pins 45,46,47,48 of the J2_01 connector, will positioned relative to the bottom-left mounting hole. By design their XY coordinates should match, so the digitizer origin should be right above the hole.
+
+But in the implemented part the origin will have offset of 3.74mm towards X- and Y+. In this case when digitizer position will be defined as the `origin` param of the `[POST] /calibration` endpoint, the specified value (assumed to be aligned with the left-bottom mounting hole) will to to be adjusted correspondingly. 
+
+For example, the user submitted `origin: [100, 150, 20]` the actual origin will be `[100 - 3.74, 150 + 3.74, 20]`
