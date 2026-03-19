@@ -25,7 +25,6 @@ const init = async () => {
       throw err
     }
     const meta = await metaRes.json()
-
     const transportPath = meta?.transports?.http?.url ?? meta?.href
     if (!transportPath) throw new Error('No transports.http.url (or href fallback) in play game response')
 
@@ -39,7 +38,14 @@ const init = async () => {
     }
     const state = await stateRes.json()
     const tcnPairs = (state?.moves ?? []).map((m) => m?.[0]).filter(Boolean)
-    return tcnPairs
+    console.log(state)
+    return {
+      moves: tcnPairs,
+      abort: (
+        state?.results?.includes('win') ||
+        state?.results?.includes('agreed')
+      )
+    }
   }
 
   const pollLoop = async () => {
@@ -48,13 +54,22 @@ const init = async () => {
         console.log('Game over!')
         break
       }
-      const state = await getMoves(gameId).catch(console.error)
-      if (!state) {
+
+      const { moves = [], abort } = await getMoves(gameId).catch(
+        e => {
+          console.error(e)
+          return { moves: undefined, abort: true }
+        }
+      )
+      if (abort) {
+        console.log('Game aborted')
+        parentPort.postMessage({
+          type: 'abort'
+        })
         break
       }
-      const moves = state.moves ?? []
       while (lastIndexSent < moves.length && credits > 0) {
-        const [tcnPair] = moves[lastIndexSent]
+        const tcnPair = moves[lastIndexSent]
         const decoded = tcn.decode(tcnPair)
         parentPort.postMessage({
           type: 'move',
@@ -73,7 +88,7 @@ const init = async () => {
       credits = msg.credits
       gameId = msg.gameId
       lastIndexSent = 0
-      pollLoop()
+      void pollLoop()
     } else if (msg.type === 'stop') {
       credits = 0
       gameId = undefined

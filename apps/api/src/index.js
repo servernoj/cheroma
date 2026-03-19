@@ -1,47 +1,25 @@
 import { register } from 'node:module'
 import { Worker } from 'node:worker_threads'
 
+register('esm-module-alias/loader', import.meta.url)
+
 const init = async () => {
-  register('esm-module-alias/loader', import.meta.url)
   const worker = new Worker(
     new URL('./worker.js', import.meta.url),
     { name: 'chess.com' }
   )
-  let queue = []
-  let processing = false
-  async function processNext() {
-    if (processing) return
-    processing = true
-    try {
-      while (queue.length) {
-        const item = queue[0]
-        let attempts = 0
-        while (true) {
-          try {
-            console.log({ move: item.move })
-            worker.postMessage({ type: 'ack', seq: item.seq })
-            queue.shift()
-            break
-          } catch (e) {
-            attempts++
-            if (attempts > 3) {
-              throw e
-            }
-          }
-        }
-      }
-    } finally {
-      processing = false
-    }
-  }
+  const { moveProcessorFactory, init } = await import('@/modules/live.js')
+  const moveProcessor = moveProcessorFactory(worker)
+
   worker.on('message', (msg) => {
     if (msg.type === 'move') {
-      queue.push(msg)
-      processNext()
+      moveProcessor(msg)
+    } else if (msg.type === 'abort') {
+      init()
+      worker.postMessage({ type: 'stop' })
     }
   })
   const serverInit = await import('./server.js')
-
   await serverInit.default(worker)
 }
 
