@@ -100,6 +100,9 @@ declare global {
     figures: Figures
     drivers: Drivers
   }
+  type FetchError = Error & {
+    statusCode?: number
+  }
 }
 
 export { };

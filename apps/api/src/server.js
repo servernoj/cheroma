@@ -6,13 +6,14 @@ import arm from '@/controller/arm.js'
 import board from '@/controller/board.js'
 import digitizer from '@/controller/digitizer.js'
 import calibration from '@/controller/calibration.js'
+import live from '@/controller/live.js'
 import { init as pca9685Init } from '@/modules/drivers/PCA9685.js'
 import { init as digitizerInit } from '@/modules/drivers/digitizer.js'
 import * as gpio from '@/modules/drivers/gpio.js'
 import { getPosition, toPoint } from '@/modules/servo.js'
 import { closeBus } from '@/modules/utils.js'
 
-export default async () => {
+export default async (worker) => {
   const app = express()
 
   app.use(morgan('dev'))
@@ -24,6 +25,7 @@ export default async () => {
   app.use('/board', board)
   app.use('/digitizer', digitizer)
   app.use('/calibration', calibration)
+  app.use('/live', live)
 
   app.use(fallback)
   app.use(errorHandler)
@@ -34,6 +36,7 @@ export default async () => {
     await digitizerInit()
     gpio.startWatch()
   })
+  app.locals.worker = worker
   const getShutdownHandler = (signal) => {
     const handler = async () => {
       process.off(signal, handler)
