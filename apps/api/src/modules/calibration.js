@@ -90,11 +90,8 @@ const runCalibrationSequence = async (origin, grid, stepMm) => {
   const { rows, cols } = grid
   const halfStep = stepMm / 2
 
-  await digitizer.initDigitizerForCapture()
-
   /** @type {number[][]} */
   const data = []
-
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
       // i = rank index (X increases); j = file index (Y decreases from a to h). halfStep = center of cell.
@@ -109,6 +106,7 @@ const runCalibrationSequence = async (origin, grid, stepMm) => {
         preTarget.z,
         target.z
       )
+      await digitizer.initDigitizerForCapture()
       const result = await runInterruptibleDescent(trajectory)
 
       if (result === null) {

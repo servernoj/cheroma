@@ -1,28 +1,32 @@
 /**
- * Digitizer: PCB with 4 × MCP23017. Polls until interrupt flag is set or timeout, then reads
- * INTCAP (and then GPIO in a loop) from all units. Does not rely on delay or nextTick for
- * clearing the interrupt: we keep reading GPIO until the software flag goes false (callback
- * saw rising edge), so hardware and software stay in sync.
- * All MCPs use open-drain INT wired OR together to one line (e.g. GPIO 27). The line stays
- * low until every chip has been read and released; the flag going false means no MCP is
- * driving the line low.
- * To avoid contact bounce re-asserting INTA after we have cleared the flag, GPINTEN is
- * disabled only after the data-reading loop has drained the INT line, and re-enabled at
- * the start of the next run (not before return), so INTA stays released when the response is sent.
+ * Digitizer application layer: four MCP23017 units on one I2C bus, INTA/INTB open-drain-wired
+ * to a single host GPIO (pull-up). The host sets a software flag on falling edge (line driven
+ * low) and clears it on rising edge.
+ *
+ * Touch capture: after a short settle delay, each MCP is read at INTF (six bytes); the three
+ * little-endian uint16s are combined in code into one 16-bit mask per chip. A loop
+ * then repeatedly reads live GPIO on every chip and ORs into the same masks so contacts that
+ * close after the first interrupt still appear (same chip, multi-pin pattern). After a bounded
+ * number of loop iterations, GPINTEN is cleared on all chips so the shared line can release
+ * even if the stylus remains grounded. The loop continues until the software interrupt flag
+ * is false (shared line high) or an optional deadline expires.
  */
 import { sleep } from '@/modules/utils.js'
 import * as gpio from '@/modules/drivers/gpio.js'
 import * as digitizer from '@/modules/drivers/digitizer.js'
 import { readRegister, writeRegister } from '@/modules/i2c.js'
 
-/** Delay (ms) after first interrupt before reading INTF/INTCAP, so multiple touches close in time can accumulate. */
+/** Idle time after first interrupt before sampling, so near-simultaneous contacts can accumulate. */
 const MULTI_TOUCH_WINDOW_MS = 10
-
-
+/** Time budget for the GPIO capture loop; paired with CAPTURE_SLEEP_MS to cap iteration count before GPINTEN off. */
+const CAPTURE_WINDOW_MS = 100
+/** Delay between full GPIO read passes on all MCPs during capture. */
+const CAPTURE_SLEEP_MS = 5
+/** Interval while polling for the software interrupt flag (e.g. test endpoint). */
+const TEST_POLL_MS = 10
 
 /**
- * Clear any pending INT and re-enable GPINTEN on all MCPs. Call before a calibration run
- * so the digitizer is ready to trigger on touch.
+ * Clear any pending INT and re-enable GPINTEN on all MCPs.
  */
 const initDigitizerForCapture = async () => {
   for (const addr of digitizer.addresses) {
@@ -32,10 +36,12 @@ const initDigitizerForCapture = async () => {
 }
 
 /**
- * Wait MULTI_TOUCH_WINDOW_MS, then read INTF/INTCAP and drain GPIO until interrupt flag clears.
- * Used by runPollUntilInterrupt (with deadline) and by calibration after an interrupt (no deadline).
- * Does not disable GPINTEN.
- * @param {{ deadline?: number }} [options] if deadline set, return null when passed (during drain loop)
+ * After MULTI_TOUCH_WINDOW_MS: seed per-chip masks from a 6-byte read at INTF (bitwise merge of
+ * the three uint16s as in code), then OR in live GPIO until the software interrupt flag clears.
+ * Once the loop iteration count exceeds CAPTURE_WINDOW_MS / CAPTURE_SLEEP_MS, clears GPINTEN on
+ * every subsequent iteration (alongside GPIO reads) until the software flag clears, so the shared
+ * line can release under sustained contact.
+ * @param {{ deadline?: number }} [options] if set, return null when passed during the loop
  * @returns {Promise<Record<string, Array<number>> | null>}
  */
 const readAndDrainTouchData = async (options = {}) => {
@@ -47,6 +53,7 @@ const readAndDrainTouchData = async (options = {}) => {
     const buf = await readRegister(digitizer.R.INTF, 6, addr)
     valueByAddress[key] = (buf.readUint16LE() & buf.readUint16LE(2)) | buf.readUint16LE(4)
   }
+  let cnt = 0
   do {
     if (options.deadline != null && Date.now() >= options.deadline) return null
     for (const addr of digitizer.addresses) {
@@ -54,7 +61,12 @@ const readAndDrainTouchData = async (options = {}) => {
       const buf = await readRegister(digitizer.R.GPIO, 2, addr)
       valueByAddress[key] |= buf.readUint16LE()
     }
-    await sleep(5)
+    await sleep(CAPTURE_SLEEP_MS)
+    if (cnt > CAPTURE_WINDOW_MS / CAPTURE_SLEEP_MS) {
+      await disableDigitizerInterrupts()
+    } else {
+      cnt++
+    }
   } while (gpio.getInterruptFlag())
   const bitsByTarget = Object.entries(valueByAddress).reduce(
     (acc, [addr, value]) => {
@@ -80,21 +92,17 @@ const readAndDrainTouchData = async (options = {}) => {
 }
 
 /**
- * Poll every 10 ms until the interrupt flag is set or timeout. When flag is set:
- * 1) Read INTCAP (2 bytes) from each MCP and OR into result (capture what caused the interrupt).
- * 2) Do at least one pass reading GPIO from each MCP (OR into result), then repeat while the flag
- *    is still true; each read clears that chip's INT output (open-drain). We read all addresses
- *    each iteration; the shared INT line stays low until every chip has been read. Flag goes false
- *    only when no MCP drives the line low. Sleep is at the end of each iteration.
- *    On timeout in this loop, returns null (incomplete data — do not trust result).
- * @param {number} timeoutSec Timeout in seconds; loop breaks after this even if no interrupt.
+ * Arm capture, then poll every TEST_POLL_MS until the software interrupt flag is set or
+ * timeoutSec elapses. On interrupt, runs readAndDrainTouchData with the same absolute deadline.
+ * Returns null on wait timeout or on capture timeout inside readAndDrainTouchData.
+ * @param {number} timeoutSec Maximum seconds to wait for the first interrupt
  * @returns {Promise<Record<string, any | null>>}
  */
 const runPollUntilInterrupt = async (timeoutSec) => {
   await initDigitizerForCapture()
   const deadline = Date.now() + timeoutSec * 1000
   for (; ;) {
-    await sleep(10)
+    await sleep(TEST_POLL_MS)
     if (Date.now() >= deadline) return null
     if (gpio.getInterruptFlag()) break
   }
@@ -102,12 +110,11 @@ const runPollUntilInterrupt = async (timeoutSec) => {
   if (!touchData) {
     return null
   }
-  await disableDigitizerInterrupts()
   let position
   try {
     position = touchDataToDigitizerXY(touchData)
   } catch (e) {
-    console.error(e.message)
+    console.warn(e.message)
   }
   return {
     touchData,
@@ -116,8 +123,7 @@ const runPollUntilInterrupt = async (timeoutSec) => {
 }
 
 /**
- * Disable GPINTEN on all MCPs so the digitizer stops asserting INTA. Call at the end of
- * a calibration run (or after runPollUntilInterrupt, which does this internally).
+ * Disable GPINTEN on all MCPs (interrupt-on-change off).
  */
 const disableDigitizerInterrupts = async () => {
   for (const addr of digitizer.addresses) {
@@ -126,8 +132,7 @@ const disableDigitizerInterrupts = async () => {
 }
 
 /**
- * Read GPIO on all MCPs until the interrupt flag clears. Call after a touch so the next
- * measurement does not see a stale flag.
+ * Read GPIO on all MCPs in a loop until the software interrupt flag clears.
  */
 const clearDigitizerInterrupt = async () => {
   while (gpio.getInterruptFlag()) {
@@ -145,7 +150,7 @@ const clearDigitizerInterrupt = async () => {
  * (x, y) in digitizer-local coordinates (mm from digitizer origin).
  * touchData is { r: number[], c: number[] }
  * @param {{ r?: number[], c?: number[] }} touchData bits-by-target from `readAndDrainTouchData`
- * @returns {{ x: number, y: number }} position relative to digitizer origin (y from cols, x from rows)
+ * @returns {{ x: number, y: number }} position relative to digitizer origin (x from cols, y from rows)
  */
 const touchDataToDigitizerXY = (touchData) => {
   const PITCH_MM = 5.08
