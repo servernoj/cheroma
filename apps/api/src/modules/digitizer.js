@@ -88,7 +88,7 @@ const readAndDrainTouchData = async (options = {}) => {
  *    only when no MCP drives the line low. Sleep is at the end of each iteration.
  *    On timeout in this loop, returns null (incomplete data — do not trust result).
  * @param {number} timeoutSec Timeout in seconds; loop breaks after this even if no interrupt.
- * @returns {Promise<Record<string, Array<number>> | null>}
+ * @returns {Promise<Record<string, any | null>>}
  */
 const runPollUntilInterrupt = async (timeoutSec) => {
   await initDigitizerForCapture()
@@ -98,10 +98,21 @@ const runPollUntilInterrupt = async (timeoutSec) => {
     if (Date.now() >= deadline) return null
     if (gpio.getInterruptFlag()) break
   }
-  const result = await readAndDrainTouchData({ deadline })
-  if (result === null) return null
+  const touchData = await readAndDrainTouchData({ deadline })
+  if (!touchData) {
+    return null
+  }
   await disableDigitizerInterrupts()
-  return result
+  let position
+  try {
+    position = touchDataToDigitizerXY(touchData)
+  } catch (e) {
+    console.error(e.message)
+  }
+  return {
+    touchData,
+    position
+  }
 }
 
 /**
@@ -152,7 +163,7 @@ const touchDataToDigitizerXY = (touchData) => {
   }
   const rowCenter = rows.reduce((a, b) => a + b, 0) / rows.length
   const colCenter = cols.reduce((a, b) => a + b, 0) / cols.length
-  return { y: colCenter * PITCH_MM, x: rowCenter * PITCH_MM }
+  return { x: colCenter * PITCH_MM, y: rowCenter * PITCH_MM }
 }
 
 export {

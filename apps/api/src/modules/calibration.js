@@ -122,7 +122,7 @@ const runCalibrationSequence = async (origin, grid, stepMm) => {
 
       const touchData = await digitizer.readAndDrainTouchData()
       const { x: digitizerX, y: digitizerY } = digitizer.touchDataToDigitizerXY(touchData)
-      const [robotX, robotY] = [ox + digitizerX, oy - digitizerY]
+      const [robotX, robotY] = [ox + digitizerY, oy - digitizerX]
       const zMeas = result.xyz.z
 
       const Qcmd = ['q0', 'q1', 'q2', 'q3'].map(
