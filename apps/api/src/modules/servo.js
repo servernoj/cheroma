@@ -1,4 +1,5 @@
-import { sleep, writeRegister } from './utils.js'
+import { writeRegister } from './i2c.js'
+import { sleep } from './utils.js'
 import { IK, toModel, K2S } from '@/modules/kinematics.js'
 import config from '@/config.json' with {type: 'json'}
 import * as PCA9685 from '@/modules/drivers/PCA9685.js'

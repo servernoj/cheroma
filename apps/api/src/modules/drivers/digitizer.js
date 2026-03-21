@@ -1,4 +1,4 @@
-import { writeRegister, readRegister } from '@/modules/utils.js'
+import { writeRegister, readRegister } from '@/modules/i2c.js'
 import config from '@/config.json' with { type: 'json' }
 import { keyBy, map } from 'lodash-es'
 

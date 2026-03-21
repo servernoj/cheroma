@@ -1,4 +1,4 @@
-import { writeRegister } from '@/modules/utils.js'
+import { writeRegister } from '@/modules/i2c.js'
 import config from '@/config.json' with { type: 'json' }
 
 const { address: deviceAddr, freq: desiredFreq } = config.drivers.pca9685

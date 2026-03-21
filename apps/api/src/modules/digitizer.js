@@ -13,7 +13,7 @@
 import { sleep } from '@/modules/utils.js'
 import * as gpio from '@/modules/drivers/gpio.js'
 import * as digitizer from '@/modules/drivers/digitizer.js'
-import { readRegister, writeRegister } from '@/modules/utils.js'
+import { readRegister, writeRegister } from '@/modules/i2c.js'
 
 /** Delay (ms) after first interrupt before reading INTF/INTCAP, so multiple touches close in time can accumulate. */
 const MULTI_TOUCH_WINDOW_MS = 10

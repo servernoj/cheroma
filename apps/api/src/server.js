@@ -11,7 +11,7 @@ import { init as pca9685Init } from '@/modules/drivers/PCA9685.js'
 import { init as digitizerInit } from '@/modules/drivers/digitizer.js'
 import * as gpio from '@/modules/drivers/gpio.js'
 import { getPosition, toPoint } from '@/modules/servo.js'
-import { closeBus } from '@/modules/utils.js'
+import { closeBus } from '@/modules/i2c.js'
 
 export default async (worker) => {
   const app = express()

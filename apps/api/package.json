@@ -31,7 +31,7 @@
     "zod": "^4.1.12"
   },
   "optionalDependencies": {
-    "@bratbit/onoff": "github:servernoj/onoff#v1.0.5"
+    "@bratbit/onoff": "^1.0.7"
   },
   "aliases": {
     "@": "./src"
