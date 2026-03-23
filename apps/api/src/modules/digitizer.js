@@ -17,7 +17,7 @@ import * as digitizer from '@/modules/drivers/digitizer.js'
 import { readRegister, writeRegister } from '@/modules/i2c.js'
 
 /** Idle time after first interrupt before sampling, so near-simultaneous contacts can accumulate. */
-const MULTI_TOUCH_WINDOW_MS = 10
+const MULTI_TOUCH_WINDOW_MS = 50
 /** Time budget for the GPIO capture loop; paired with CAPTURE_SLEEP_MS to cap iteration count before GPINTEN off. */
 const CAPTURE_WINDOW_MS = 100
 /** Delay between full GPIO read passes on all MCPs during capture. */
@@ -164,7 +164,7 @@ const touchDataToDigitizerXY = (touchData) => {
     cols.length > 2 ||
     cols.length === 2 && Math.abs(cols[1] - cols[0]) !== 1
   ) {
-    throw new Error('Calibration: touch coordinates cannot be determined')
+    throw new Error(`Calibration: touch coordinates cannot be determined: ${JSON.stringify(touchData, null, 2)}`)
   }
   const rowCenter = rows.reduce((a, b) => a + b, 0) / rows.length
   const colCenter = cols.reduce((a, b) => a + b, 0) / cols.length

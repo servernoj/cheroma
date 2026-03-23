@@ -82,9 +82,10 @@ const runInterruptibleDescent = async (points) => {
  * @param {[number, number, number]} origin [x,y,z] in robot frame for grid (0,0) — row1 & col1 corner
  * @param {{ rows: number, cols: number }} grid rows = rank index count, cols = file index count
  * @param {number} stepMm step between grid points (mm); touch is at cell center, offset by stepMm/2 on both axes
+ * @param {number} repeat repeat each calibration point specified number of times
  * @returns {Promise<number[][]>} one row per position: [q0, q1, q2, q3, x, y, z]
  */
-const runCalibrationSequence = async (origin, grid, stepMm) => {
+const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
   const elevationMm = config.drivers.digitizer?.elevation ?? 50
   const [ox, oy, oz] = origin
   const { rows, cols } = grid
@@ -94,41 +95,46 @@ const runCalibrationSequence = async (origin, grid, stepMm) => {
   const data = []
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
-      // i = rank index (X increases); j = file index (Y decreases from a to h). halfStep = center of cell.
-      const target = { x: ox + i * stepMm + halfStep, y: oy - j * stepMm - halfStep, z: oz }
-      const preTarget = { ...target, z: target.z + elevationMm }
+      for (let k = 0; k < repeat; k++) {
+        // i = rank index (X increases); j = file index (Y decreases from a to h). halfStep = center of cell.
+        const target = { x: ox + i * stepMm + halfStep, y: oy - j * stepMm - halfStep, z: oz }
+        const preTarget = { ...target, z: target.z + elevationMm }
 
-      await servo.toPoint(IKK(preTarget), [], { relax: false })
+        await servo.toPoint(IKK(preTarget), [], { relax: false })
 
-      const trajectory = buildVerticalDescentTrajectory(
-        target.x,
-        target.y,
-        preTarget.z,
-        target.z
-      )
-      await digitizer.initDigitizerForCapture()
-      const result = await runInterruptibleDescent(trajectory)
-
-      if (result === null) {
-        await digitizer.clearDigitizerInterrupt()
-        await digitizer.disableDigitizerInterrupts()
-        await servo.toPoint(servo.getPosition('home'), [], { relax: true })
-        throw new Error(
-          `Calibration: no touch at grid (${i},${j}); descent completed without interrupt`
+        const trajectory = buildVerticalDescentTrajectory(
+          target.x,
+          target.y,
+          preTarget.z,
+          target.z,
+          {
+            maxSpeedMmPerSec: 60
+          }
         )
+        await digitizer.initDigitizerForCapture()
+        const result = await runInterruptibleDescent(trajectory)
+
+        if (result === null) {
+          await digitizer.clearDigitizerInterrupt()
+          await digitizer.disableDigitizerInterrupts()
+          await servo.toPoint(servo.getPosition('home'), [], { relax: true })
+          throw new Error(
+            `Calibration: no touch at grid (${i},${j}); descent completed without interrupt`
+          )
+        }
+
+        const touchData = await digitizer.readAndDrainTouchData()
+        const { x: digitizerX, y: digitizerY } = digitizer.touchDataToDigitizerXY(touchData)
+        const [robotX, robotY] = [ox + digitizerY, oy - digitizerX]
+        const zMeas = result.xyz.z
+
+        const Qcmd = ['q0', 'q1', 'q2', 'q3'].map(
+          k => Math.round(result.angles[servoNameByKinematics[k]] * 100) / 100
+        )
+        data.push([...Qcmd, robotX, robotY, zMeas])
+        // Return to home after every position so the next measurement starts from the same pose
+        await servo.toPoint(servo.getPosition('home'), [], { relax: true })
       }
-
-      const touchData = await digitizer.readAndDrainTouchData()
-      const { x: digitizerX, y: digitizerY } = digitizer.touchDataToDigitizerXY(touchData)
-      const [robotX, robotY] = [ox + digitizerY, oy - digitizerX]
-      const zMeas = result.xyz.z
-
-      const Qcmd = ['q0', 'q1', 'q2', 'q3'].map(
-        k => result.angles[servoNameByKinematics[k]]
-      )
-      data.push([...Qcmd, robotX, robotY, zMeas])
-      // Return to home after every position so the next measurement starts from the same pose
-      await servo.toPoint(servo.getPosition('home'), [], { relax: true })
     }
   }
 

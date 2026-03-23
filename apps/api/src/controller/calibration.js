@@ -17,14 +17,17 @@ router.post(
     body: z.object({
       origin: originSchema,
       grid: gridSchema,
-      stepMm: z.number().positive().finite()
+      stepMm: z.number().positive(),
+      repeat: z.number().int().positive().default(1)
     })
   }),
   async (req, res) => {
-    const { origin, grid, stepMm } = res.locals.parsed.body
+    const { origin, grid, stepMm, repeat } = res.locals.parsed.body
     // data: number[][] — each row [q0, q1, q2, q3, x, y, z] for the fitting algorithm
-    const data = await runCalibrationSequence(origin, grid, stepMm)
-    res.json({ data })
+    const data = await runCalibrationSequence(origin, grid, stepMm, repeat)
+    const csv = data.map(r => r.join(',')).join('\n')
+    res.setHeader('content-type', 'text/csv')
+    res.send(csv)
   }
 )
 
