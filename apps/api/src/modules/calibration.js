@@ -8,7 +8,7 @@ import { IKK } from '@/modules/kinematics.js'
 import * as servo from '@/modules/servo.js'
 import * as gpio from '@/modules/drivers/gpio.js'
 import * as digitizer from '@/modules/digitizer.js'
-import { sleep } from '@/modules/utils.js'
+import { median, sleep } from '@/modules/utils.js'
 import { performance } from 'node:perf_hooks'
 
 const dtMs = config.drivers.pca9685.dtMs
@@ -95,6 +95,7 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
   const data = []
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
+      const poseData = []
       for (let k = 0; k < repeat; k++) {
         // i = rank index (X increases); j = file index (Y decreases from a to h). halfStep = center of cell.
         const target = { x: ox + i * stepMm + halfStep, y: oy - j * stepMm - halfStep, z: oz }
@@ -108,7 +109,7 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
           preTarget.z,
           target.z,
           {
-            maxSpeedMmPerSec: 60
+            maxSpeedMmPerSec: 100
           }
         )
         await digitizer.initDigitizerForCapture()
@@ -131,10 +132,31 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
         const Qcmd = ['q0', 'q1', 'q2', 'q3'].map(
           k => Math.round(result.angles[servoNameByKinematics[k]] * 100) / 100
         )
-        data.push([...Qcmd, robotX, robotY, zMeas])
+        poseData.push([...Qcmd, robotX, robotY, zMeas])
         // Return to home after every position so the next measurement starts from the same pose
         await servo.toPoint(servo.getPosition('home'), [], { relax: true })
       }
+      // poseData: Array<[q0,q1,q2,q3,x,y,z]>
+      if (!poseData.length || !poseData.every(r => r.length === poseData[0].length)) {
+        throw new Error('Calibration: invalid poseData shape')
+      }
+      const colMedians = poseData[0].map((_, col) => median(poseData.map(r => r[col])))
+      const weights = [0.5, 0.5, 0.5, 1, 1, 1, 1]
+      let bestIdx = 0
+      let bestScore = Infinity
+      for (let i = 0; i < poseData.length; i++) {
+        const row = poseData[i]
+        let s = 0
+        for (let j = 0; j < row.length; j++) {
+          const d = row[j] - colMedians[j]
+          s += weights[j] * d * d
+        }
+        if (s < bestScore) {
+          bestScore = s
+          bestIdx = i
+        }
+      }
+      data.push(poseData[bestIdx])
     }
   }
 

@@ -16,6 +16,18 @@ const sleep = (ms) => new Promise(
 )
 
 /**
+ * Calculates median over numerical array
+ * @param {Array<number>} arr 
+ * @returns number
+ */
+const median = (arr) => {
+  if (!arr.length) return null
+  const s = [...arr].sort((a, b) => a - b)
+  const m = Math.floor(s.length / 2)
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+}
+
+/**
  * 
  * @param {{
  *   array: Array<any>
@@ -169,5 +181,6 @@ export {
   mOp,
   sleep,
   throttler,
-  toBinary
+  toBinary,
+  median
 }
