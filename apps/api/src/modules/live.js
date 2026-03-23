@@ -1,12 +1,64 @@
-import { sleep } from '@/modules/utils.js'
+import * as board from '@/modules/board.js'
+import { pick } from 'lodash-es'
 import { Chess } from 'chess.js'
 
 const chess = new Chess()
 
+/**
+ * @param {import('chess.js').Move} move 
+ * @returns {Array<{fn: string, args: Array<any>}>}
+ */
+const moveToArmActions = (move) => {
+  const result = []
+  if (move.isCapture()) {
+    // TODO: add special handling for promotions
+    result.push({
+      fn: 'remove',
+      args: [{
+        from: move.isEnPassant() ? `${move.to[0]}${move.from[1]}` : move.to,
+        piece: move.captured
+      }]
+    })
+  } else if (move.isKingsideCastle()) {
+    result.push({
+      fn: 'move',
+      args: [{
+        ...(
+          move.color === 'w'
+            ? { from: 'h1', to: 'f1' }
+            : { from: 'h8', to: 'f8' }
+        ),
+        piece: 'r'
+      }]
+    })
+  } else if (move.isQueensideCastle()) {
+    result.push({
+      fn: 'move',
+      args: [{
+        ...(
+          move.color === 'w'
+            ? { from: 'a1', to: 'd1' }
+            : { from: 'a8', to: 'd8' }
+        ),
+        piece: 'r'
+      }]
+    })
+  }
+
+  result.push({
+    fn: 'move',
+    args: [{
+      from: move.from,
+      to: move.to,
+      piece: move.piece
+    }]
+  })
+  return result
+}
+
 const handleMove = async (move) => {
   const m = chess.move(move)
-
-  console.log({ move, m })
+  console.log(pick(m, ['from', 'to', 'piece', 'color']))
   if (m.isCapture()) {
     console.log(`capture of ${m.captured}`)
   } else if (m.isEnPassant()) {
@@ -38,12 +90,14 @@ const handleMove = async (move) => {
       console.log('draw')
     }
   }
-  if (chess.isGameOver()) {
-    return true
+  // -- Shake the room
+  const armActions = moveToArmActions(m)
+  for (const action of armActions) {
+    if (typeof board[action.fn] === 'function') {
+      await board[action.fn](action.args)
+    }
   }
-
-  await sleep(500)
-  return false
+  return chess.isGameOver()
 }
 
 const init = () => {

@@ -3,7 +3,7 @@ import { IKK } from '@/modules/kinematics.js'
 import config from '@/config.json' with {type: 'json'}
 import { sleep } from './utils.js'
 
-const figures = Object.keys(config.figures)
+const pieces = Object.keys(config.pieces)
 
 const release = async () => {
   await servo.setChannel({
@@ -95,20 +95,20 @@ const search = async (at, options) => {
 
 /**
  * Picks up and moves a piece `from` to `to` and returns to `home`
- * @param {string} fromNotation
- * @param {string} toNotation
- * @param {keyof Figures} figure
+ * @param {{from: string, to: string, piece: string}} args
  * @param {{
  *   elevation?: number
  * }} [options] 
  */
-const move = async (fromNotation, toNotation, figure, options) => {
+const move = async (args, options) => {
   const {
     elevation = 100,
   } = options ?? {}
-  const height = config.figures[figure].height
-  const from = notationToPosition(fromNotation)
-  const to = notationToPosition(toNotation)
+  const height = config.pieces[args.piece].height
+  const from = notationToPosition(args.from)
+  const to = args.to === 'basket'
+    ? config.board.basket
+    : notationToPosition(args.to)
   Object.assign(from, {
     z: from.z + height
   })
@@ -127,6 +127,20 @@ const move = async (fromNotation, toNotation, figure, options) => {
   await release()
   await lift(to, { elevation })
   await servo.toPoint(servo.getPosition('home'), [], { relax: true })
+}
+
+/**
+ * Picks up a piece and removes it from the board, then returns to `home`
+ * @param {{from: string, piece: string}} args
+ * @param {{
+ *   elevation?: number
+ * }} [options] 
+ */
+const remove = async (args, options) => {
+  await move({
+    ...args,
+    to: 'basket',
+  }, options)
 }
 
 /**
@@ -160,9 +174,9 @@ const notationToPosition = (notation, options) => {
     ? -deficit * (rankNum > 4 ? 1 : 0.5)
     : 0
   // --
-  const x = Math.round(originOffset[0] + (rankNum - 1) * cellSize + cellSize * 0.5 + xCorrection)
-  const y = Math.round(originOffset[1] - fileIdx * cellSize - cellSize * 0.5)
-  const z = originOffset[2]
+  const x = Math.round(originOffset.x + (rankNum - 1) * cellSize + cellSize * 0.5 + xCorrection)
+  const y = Math.round(originOffset.y - fileIdx * cellSize - cellSize * 0.5)
+  const z = originOffset.z
   return { x, y, z }
 }
 
@@ -174,10 +188,11 @@ const home = async (options) => {
 }
 
 export {
-  figures,
+  pieces,
   home,
   notationToPosition,
   move,
+  remove,
   search,
   grab,
   release,

@@ -48,17 +48,17 @@ declare global {
     t: Array<number>
   }
   type Board = {
-    originOffset: [number, number, number],
+    originOffset: KinematicsOutput,
     cellSize: number
     gripperChannel: number
     open: number
     close: number
     basket: KinematicsOutput
   }
-  type Figures = {
-    [f in keyof typeof config['figures']]: {
+  type Pieces = {
+    [f in keyof typeof config['pieces']]: {
       height: number
-      short: string
+      desc: string
     }
   }
   type Pca9685Config = {
@@ -97,7 +97,7 @@ declare global {
     geom: GeomData
     fitting: Fitting
     board: Board
-    figures: Figures
+    pieces: Pieces
     drivers: Drivers
   }
   type FetchError = Error & {

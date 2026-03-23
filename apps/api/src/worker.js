@@ -38,7 +38,6 @@ const init = async () => {
     }
     const state = await stateRes.json()
     const tcnPairs = (state?.moves ?? []).map((m) => m?.[0]).filter(Boolean)
-    console.log(state)
     return {
       moves: tcnPairs,
       abort: (

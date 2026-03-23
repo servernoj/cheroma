@@ -50,12 +50,12 @@ router.post(
     body: z.object({
       from: z.string(),
       to: z.string(),
-      figure: z.enum(board.figures)
+      piece: z.enum(board.pieces)
     })
   }),
   async (req, res) => {
-    const { from, to, figure } = res.locals.parsed.body
-    await board.move(from, to, figure)
+    const { from, to, piece } = res.locals.parsed.body
+    await board.move({ from, to, piece })
     res.sendStatus(200)
   }
 )

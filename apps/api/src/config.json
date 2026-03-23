@@ -171,7 +171,11 @@
     }
   },
   "board": {
-    "originOffset":[76,165,25],
+    "originOffset":{
+      "x": 76,
+      "y": 165,
+      "z": 25
+    },
     "cellSize": 40,
     "grabberChannel": 4,
     "grab": 4000,
@@ -182,14 +186,30 @@
       "z": 30
     }
   },
-  "figures": {
-    "queen": {
+  "pieces": {
+    "q": {
       "height": 70,
-      "short": "q"
+      "desc": "queen"
     },
-    "pawn": {
+    "k": {
+      "height": 75,
+      "desc": "king"
+    },
+    "p": {
       "height": 35,
-      "short": ""
+      "desc": "pawn"
+    },
+    "b": {
+      "height": 50,
+      "desc": "bishop"
+    },
+    "n": {
+      "height": 50,
+      "desc": "knight"
+    },
+    "r": {
+      "height": 50,
+      "desc": "rook"
     }
   },
   "geom": {
