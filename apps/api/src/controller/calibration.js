@@ -2,6 +2,7 @@ import express from 'express'
 import { runCalibrationSequence } from '@/modules/calibration.js'
 import { validator } from '@/controller/mw/index.js'
 import z from 'zod'
+import { roundFactory } from '@/modules/utils.js'
 
 const router = express.Router()
 
@@ -25,7 +26,8 @@ router.post(
     const { origin, grid, stepMm, repeat } = res.locals.parsed.body
     // data: number[][] — each row [q0, q1, q2, q3, x, y, z] for the fitting algorithm
     const data = await runCalibrationSequence(origin, grid, stepMm, repeat)
-    const csv = data.map(r => r.join(',')).join('\n')
+    const rounder = roundFactory(2)
+    const csv = data.map(r => r.map(rounder).join(',')).join('\n')
     res.setHeader('content-type', 'text/csv')
     res.send(csv)
   }

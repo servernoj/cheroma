@@ -16,6 +16,16 @@ const sleep = (ms) => new Promise(
 )
 
 /**
+ * Factory producing arbitrary precision rounder
+ * @param {number} precision number of digits in fractional part
+ * @returns {(x:number) => number} 
+ */
+const roundFactory = (precision = 2) => x => {
+  const gain = Math.pow(10, precision)
+  return Math.round(x * gain) / gain
+}
+
+/**
  * Calculates median over numerical array
  * @param {Array<number>} arr 
  * @returns number
@@ -182,5 +192,6 @@ export {
   sleep,
   throttler,
   toBinary,
-  median
+  median,
+  roundFactory
 }

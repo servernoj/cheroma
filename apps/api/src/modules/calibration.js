@@ -69,7 +69,7 @@ const runInterruptibleDescent = async (points) => {
       nextTick = now + dtMs
     }
     if (gpio.getInterruptFlag()) {
-      await sleep(1000)
+      await sleep(500)
       return { index: i, xyz: points[i].xyz, angles: points[i].angles }
     }
   }
@@ -131,7 +131,7 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
         const zMeas = result.xyz.z
 
         const Qcmd = ['q0', 'q1', 'q2', 'q3'].map(
-          k => Math.round(result.angles[servoNameByKinematics[k]] * 100) / 100
+          k => result.angles[servoNameByKinematics[k]]
         )
         poseData.push([...Qcmd, robotX, robotY, zMeas])
         // Return to home after every position so the next measurement starts from the same pose
