@@ -11,7 +11,7 @@ import * as digitizer from '@/modules/digitizer.js'
 import { median, sleep } from '@/modules/utils.js'
 import { performance } from 'node:perf_hooks'
 
-const dtMs = config.drivers.pca9685.dtMs
+const dtMs = config.drivers.pca9685.dtMs * 10
 
 /**
  * @type {{[k in keyof KinematicsInput]: ServoName}}
@@ -69,6 +69,7 @@ const runInterruptibleDescent = async (points) => {
       nextTick = now + dtMs
     }
     if (gpio.getInterruptFlag()) {
+      await sleep(1000)
       return { index: i, xyz: points[i].xyz, angles: points[i].angles }
     }
   }
@@ -134,6 +135,7 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
         )
         poseData.push([...Qcmd, robotX, robotY, zMeas])
         // Return to home after every position so the next measurement starts from the same pose
+        await servo.toPoint(IKK(preTarget), [], { relax: false })
         await servo.toPoint(servo.getPosition('home'), [], { relax: true })
       }
       // poseData: Array<[q0,q1,q2,q3,x,y,z]>
