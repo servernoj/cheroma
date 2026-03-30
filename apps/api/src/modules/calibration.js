@@ -11,8 +11,6 @@ import * as digitizer from '@/modules/digitizer.js'
 import { median, sleep } from '@/modules/utils.js'
 import { performance } from 'node:perf_hooks'
 
-const dtMs = config.drivers.pca9685.dtMs * 10
-
 /**
  * @type {{[k in keyof KinematicsInput]: ServoName}}
  */
@@ -32,6 +30,7 @@ const servoNameByKinematics = Object.entries(config.servos).reduce(
  * @returns {Array<{ xyz: KinematicsOutput, angles: ServoPosition }>}
  */
 const buildVerticalDescentTrajectory = (x, y, zTop, zBottom, options = {}) => {
+  const dtMs = config.drivers.pca9685.dtMs
   const maxSpeedMmPerSec = options.maxSpeedMmPerSec ?? 50
   const deltaZ = zBottom - zTop
   const maxDistance = Math.abs(deltaZ)
@@ -55,6 +54,7 @@ const buildVerticalDescentTrajectory = (x, y, zTop, zBottom, options = {}) => {
  * @returns {Promise<{ index: number, xyz: KinematicsOutput, angles: ServoPosition } | null>} point at touch, or null if no interrupt
  */
 const runInterruptibleDescent = async (points) => {
+  const dtMs = config.drivers.pca9685.dtMs * 10
   let nextTick = performance.now() + dtMs
   for (let i = 0; i < points.length; i++) {
     const { angles } = points[i]
@@ -69,7 +69,7 @@ const runInterruptibleDescent = async (points) => {
       nextTick = now + dtMs
     }
     if (gpio.getInterruptFlag()) {
-      await sleep(500)
+      await sleep(200)
       return { index: i, xyz: points[i].xyz, angles: points[i].angles }
     }
   }
