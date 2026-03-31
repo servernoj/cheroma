@@ -1,3 +1,5 @@
+import { Matrix } from 'ml-matrix'
+
 /**
  * Sleep for specified number of milliseconds
  * @param {number} ms Sleep time
@@ -69,129 +71,49 @@ const throttler = (
   )
 }
 
-/**
- * @param {Array<Array<number>>} A 
- * @param {Array<Array<number>>} B
- * @returns {Array<Array<number>>}
- */
-const mMult = (A, B) => {
-  if (
-    !Array.isArray(A) ||
-    !A.every(
-      row => (
-        Array.isArray(row) &&
-        A[0].length === row.length
-      )
-    ) ||
-    !Array.isArray(B) ||
-    !B.every(
-      row => (
-        Array.isArray(row) &&
-        B[0].length === row.length
-      )
-    ) ||
-    A[0].length !== B.length
-  ) {
-    throw new Error('Invalid dimensions')
-  }
-  // A: M x N, B: N x K
-  const M = A.length
-  const N = A[0].length
-  const K = B[0].length
-  const C = []
-  for (let i = 0; i < M; i++) {
-    const c = []
-    for (let j = 0; j < K; j++) {
-      let sum = 0
-      for (let p = 0; p < N; p++) {
-        sum += A[i][p] * B[p][j]
-      }
-      c.push(sum)
-    }
-    C.push(c)
-  }
-  return C
-}
-
-/**
- * @param {Array<Array<number>>} A 
- * @param {Array<Array<number>>} B
- * @param {(x:number, y:number) => number} op
- * @returns {Array<Array<number>>}
- */
-const mOp = (A, B, op) => {
-  if (
-    !Array.isArray(A) ||
-    !A.every(
-      row => (
-        Array.isArray(row) &&
-        A[0].length === row.length
-      )
-    ) ||
-    !Array.isArray(B) ||
-    !B.every(
-      row => (
-        Array.isArray(row) &&
-        B[0].length === row.length
-      )
-    ) ||
-    A.length !== B.length ||
-    A[0].length !== B[0].length
-  ) {
-    throw new Error('Invalid dimensions')
-  }
-  const M = A.length
-  const N = A[0].length
-  const C = []
-  for (let i = 0; i < M; i++) {
-    const c = []
-    for (let j = 0; j < N; j++) {
-      c.push(op(A[i][j], B[i][j]))
-    }
-    C.push(c)
-  }
-  return C
-}
-
-/**
- * 
- * @param {Array<Array<number>>} A 
- * @returns {Array<Array<number>>} 
- */
-const mTrans = (A) => {
-  if (
-    !Array.isArray(A) ||
-    !A.every(
-      row => (
-        Array.isArray(row) &&
-        A[0].length === row.length
-      )
-    )
-  ) {
-    throw new Error('Invalid dimensions')
-  }
-  const M = A.length
-  const N = A[0].length
-  const C = []
-  for (let j = 0; j < N; j++) {
-    const c = []
-    for (let i = 0; i < M; i++) {
-      c.push(A[i][j])
-    }
-    C.push(c)
-  }
-  return C
-}
-
 const toBinary = (byte) => '0b' + (byte >>> 0).toString(2).padStart(8, '0')
 
+const d2r = d => (d * Math.PI) / 180
+const r2d = r => r * 180 / Math.PI
+
+const cosd = d => Math.cos(d2r(d))
+
+const sind = d => Math.sin(d2r(d))
+
+const rotationMatrix = (rollDeg, pitchDeg, yawDeg) => {
+  const cr = cosd(rollDeg)
+  const sr = sind(rollDeg)
+  const cp = cosd(pitchDeg)
+  const sp = sind(pitchDeg)
+  const cy = cosd(yawDeg)
+  const sy = sind(yawDeg)
+  const Rx = new Matrix([
+    [1, 0, 0],
+    [0, cr, -sr],
+    [0, sr, cr]
+  ])
+  const Ry = new Matrix([
+    [cp, 0, sp],
+    [0, 1, 0],
+    [-sp, 0, cp]
+  ])
+  const Rz = new Matrix([
+    [cy, -sy, 0],
+    [sy, cy, 0],
+    [0, 0, 1]
+  ])
+  return Rz.mmul(Ry).mmul(Rx)
+}
+
 export {
-  mMult,
-  mTrans,
-  mOp,
   sleep,
   throttler,
   toBinary,
   median,
-  roundFactory
+  roundFactory,
+  d2r,
+  r2d,
+  cosd,
+  sind,
+  rotationMatrix
 }

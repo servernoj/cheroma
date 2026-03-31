@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RC discharge: fit \(V_0\) and \(\tau\) (guided MATLAB)</title>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']]
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+<style>
+  :root { color-scheme: light; }
+  body {
+    max-width: 760px;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.7;
+    color: #1a1a1a;
+    background: #fdfdfd;
+  }
+  h1 { font-size: 1.45rem; border-bottom: 2px solid #333; padding-bottom: .4rem; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; color: #222; }
+  .box {
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+  }
+  .eq {
+    background: #f4f4f0;
+    border-left: 3px solid #888;
+    padding: .85rem 1.2rem;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+  code, pre {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.86rem;
+    background: #f0f0f0;
+    border-radius: 4px;
+  }
+  code { padding: .15em .4em; }
+  pre {
+    padding: .85rem 1rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+  }
+  .do { border-left: 4px solid #2a6; }
+  .why { border-left: 4px solid #26a; }
+  .note { font-size: 0.92rem; color: #444; }
+</style>
+</head>
+<body>
+
+<h1>RC discharge: identify \(V_0\) and \(\tau\) from \((t, V)\) data</h1>
+
+<p class="note">
+Step-by-step guide for <strong>MATLAB</strong>. You enter <code>ts</code> and <code>vs</code> and run the steps yourself.
+Math below uses <strong>LaTeX</strong> (MathJax). No noise is assumed in your synthetic experiment.
+</p>
+
+<!-- ========== MODEL ========== -->
+<h2>Model and residual</h2>
+<div class="box why">
+  <p>Time constant \(\tau = RC\). Ideal capacitor discharge:</p>
+  <div class="eq">
+  $$V(t) = V_0\, e^{-t/\tau}$$
+  </div>
+  <p>Parameter vector (column \(2 \times 1\)):</p>
+  <div class="eq">
+  $$\mathbf{p} = \begin{pmatrix} V_0 \\ \tau \end{pmatrix}$$
+  </div>
+  <p>For each sample \(k = 1,\ldots,N\), with measurements \((t_k, V^{\mathrm{meas}}_k)\) stored as <code>ts(k)</code>, <code>vs(k)</code>:</p>
+  <div class="eq">
+  $$r_k(\mathbf{p}) = V^{\mathrm{meas}}_k - V_0\, e^{-t_k/\tau}$$
+  </div>
+  <p>Stack \(\mathbf{r}(\mathbf{p}) = [r_1,\ldots,r_N]^\top\). Objective (half sum of squares):</p>
+  <div class="eq">
+  $$\Phi(\mathbf{p}) = \tfrac{1}{2}\,\|\mathbf{r}\|_2^2 = \tfrac{1}{2}\sum_{k=1}^N r_k^2$$
+  </div>
+</div>
+
+<!-- ========== STAGE 0 ========== -->
+<h2>Stage 0 — Data in MATLAB and a plot</h2>
+<div class="box do">
+  <p><strong>You do:</strong></p>
+  <ol>
+    <li>Define column vectors <code>ts</code> and <code>vs</code>.</li>
+    <li><code>plot(ts, vs, 'o')</code>; label axes.</li>
+    <li>Check <code>numel(ts) == numel(vs)</code>.</li>
+  </ol>
+</div>
+<p class="note"><strong>Why:</strong> If \(t=0\) is the start of discharge, \(V_0\) is the model value at \(t=0\) (possibly <em>extrapolated</em> if your first sample has \(t_1 &gt; 0\)).</p>
+
+<!-- ========== STAGE 1 ========== -->
+<h2>Stage 1 — Residual function \(\mathbf{r}(\mathbf{p})\)</h2>
+<div class="box do">
+  <p><strong>You do:</strong> Implement <code>r = residual_rc(p, ts, vs)</code> with <code>p(1)=V_0</code>, <code>p(2)=tau</code>:</p>
+  <pre>function r = residual_rc(p, ts, vs)
+  V0 = p(1);
+  tau = p(2);
+  vhat = V0 * exp(-ts / tau);
+  r = vs - vhat;
+end</pre>
+  <p>Pick a trial \(\mathbf{p}_0 = [V_{0,\mathrm{guess}};\,\tau_{\mathrm{guess}}]^\top\). Compute <code>r0 = residual_rc(p0, ts, vs)</code> and</p>
+  <div class="eq">
+  $$\Phi(\mathbf{p}_0) = \tfrac{1}{2}\,\mathbf{r}_0^\top \mathbf{r}_0$$
+  </div>
+</div>
+
+<!-- ========== STAGE 2a ========== -->
+<h2>Stage 2a — Numerical Jacobian \(\mathbf{J}\)</h2>
+<p>Dimensions: \(\mathbf{J} \in \mathbb{R}^{N \times 2}\), with \(J_{kj} = \partial r_k / \partial p_j\).</p>
+
+<div class="box why">
+  <p><strong>Meaning of \(\mathbf{e}_1\), \(\mathbf{e}_2\), \(h_1\), \(h_2\).</strong></p>
+  <p>\(\mathbf{e}_1\) and \(\mathbf{e}_2\) are the <em>standard basis vectors</em> in \(\mathbb{R}^2\) (you have two parameters):</p>
+  <div class="eq">
+  $$\mathbf{e}_1 = \begin{pmatrix} 1 \\ 0 \end{pmatrix}, \qquad
+  \mathbf{e}_2 = \begin{pmatrix} 0 \\ 1 \end{pmatrix}$$
+  </div>
+  <p>So \(\mathbf{p} + h_1 \mathbf{e}_1\) bumps <em>only</em> \(V_0\) by \(h_1\), and \(\mathbf{p} + h_2 \mathbf{e}_2\) bumps <em>only</em> \(\tau\) by \(h_2\). Each column of \(\mathbf{J}\) is the rate of change of \(\mathbf{r}\) along one coordinate of \(\mathbf{p}\).</p>
+  <p>\(h_1\) and \(h_2\) are small <em>finite-difference step sizes</em> for those two coordinates. They may differ because \(V_0\) and \(\tau\) can live on very different scales (e.g. volts vs seconds). A common rule is something like \(h_j \sim 10^{-6}\max(1, |p_j|)\), not necessarily one shared \(h\) for both.</p>
+  <p>In each case you approximate a partial derivative:</p>
+  <div class="eq">
+  $$\frac{\partial \mathbf{r}}{\partial p_j} \approx \frac{\mathbf{r}(\mathbf{p} + h_j \mathbf{e}_j) - \mathbf{r}(\mathbf{p})}{h_j}$$
+  </div>
+</div>
+
+<div class="box do">
+  <p><strong>Forward differences (you choose small \(h_1, h_2\)):</strong></p>
+  <div class="eq">
+  $$\mathbf{J}_{:1} \approx \frac{\mathbf{r}(\mathbf{p} + h_1 \mathbf{e}_1) - \mathbf{r}(\mathbf{p})}{h_1}, \qquad
+  \mathbf{J}_{:2} \approx \frac{\mathbf{r}(\mathbf{p} + h_2 \mathbf{e}_2) - \mathbf{r}(\mathbf{p})}{h_2}$$
+  </div>
+  <p>with \(\mathbf{e}_1 = [1,0]^\top\), \(\mathbf{e}_2 = [0,1]^\top\). In MATLAB: <code>e1 = [1;0]; e2 = [0;1];</code> then build <code>J(:,1)</code>, <code>J(:,2)</code>; confirm <code>size(J) == [N,2]</code>.</p>
+</div>
+
+<!-- ========== STAGE 3 ========== -->
+<h2>Stage 3 — Gauss–Newton step</h2>
+<div class="box why">
+  <p>Normal equations for the Gauss–Newton increment \(\Delta\mathbf{p}\):</p>
+  <div class="eq">
+  $$\mathbf{J}^\top \mathbf{J}\,\Delta\mathbf{p} = -\mathbf{J}^\top \mathbf{r}$$
+  </div>
+  <p>Then \(\mathbf{p}_{\mathrm{new}} = \mathbf{p} + \Delta\mathbf{p}\).</p>
+</div>
+<div class="box do">
+  <pre>A = J' * J;
+b = -(J' * r0);
+dp = A \ b;
+p1 = p0 + dp;</pre>
+  <p>Recompute \(\mathbf{r}\) at \(\mathbf{p}_1\); compare \(\Phi\) before and after. Loop until \(\|\Delta\mathbf{p}\|\) is small.</p>
+</div>
+
+<!-- ========== STAGE 2b ========== -->
+<h2>Stage 2b — Analytical Jacobian</h2>
+<p>Predicted voltage \(\hat{V}(t) = V_0 e^{-t/\tau}\). Since \(r_k = V^{\mathrm{meas}}_k - \hat{V}(t_k)\),</p>
+<div class="eq">
+$$\frac{\partial r_k}{\partial V_0} = -\frac{\partial \hat{V}}{\partial V_0}, \qquad
+\frac{\partial r_k}{\partial \tau} = -\frac{\partial \hat{V}}{\partial \tau}$$
+  </div>
+<div class="box why">
+  <p>Derivatives of \(\hat{V}(t) = V_0 e^{-t/\tau}\):</p>
+  <div class="eq">
+  $$\frac{\partial \hat{V}}{\partial V_0} = e^{-t/\tau}$$
+  </div>
+  <p>Using \(\dfrac{d}{d\tau} e^{-t/\tau} = e^{-t/\tau}\cdot \dfrac{t}{\tau^2}\):</p>
+  <div class="eq">
+  $$\frac{\partial \hat{V}}{\partial \tau} = V_0\, e^{-t/\tau}\,\frac{t}{\tau^2}$$
+  </div>
+  <p>So (column-wise, evaluated at each <code>ts(k)</code>):</p>
+  <div class="eq">
+  $$\mathbf{J}_{:1} = -\exp(-\mathbf{t}/\tau), \qquad
+  \mathbf{J}_{:2} = -V_0\, \exp(-\mathbf{t}/\tau) \odot (\mathbf{t}/\tau^2)$$
+  </div>
+  <p>where \(\mathbf{t}\) is the vector <code>ts</code> and \(\odot\) is element-wise product (use <code>.*</code> in MATLAB).</p>
+</div>
+<div class="box do">
+  <p><strong>You do:</strong> <code>J = jacobian_rc_analytic(p, ts)</code> returning <code>N×2</code>; repeat Stage&nbsp;3.</p>
+</div>
+
+<!-- ========== STAGE 4 ========== -->
+<h2>Stage 4 — Optional: Levenberg–Marquardt</h2>
+
+<div class="box why">
+  <p><strong>What is \(\Phi\)?</strong> The scalar objective you minimize is the <em>half</em> sum of squared residuals (same \(\Phi\) as in the model section):</p>
+  <div class="eq">
+  $$\Phi(\mathbf{p}) = \tfrac{1}{2}\,\|\mathbf{r}(\mathbf{p})\|_2^2 = \tfrac{1}{2}\sum_k r_k^2.$$
+  </div>
+  <p>So “\(\Phi\) decreased” means the total squared error decreased. Each GN/LM step tries to choose \(\Delta\mathbf{p}\) so that \(\Phi(\mathbf{p}+\Delta\mathbf{p})\) is smaller than \(\Phi(\mathbf{p})\), using a <em>linear</em> approximation of \(\mathbf{r}\) near \(\mathbf{p}\).</p>
+</div>
+
+<div class="box why">
+  <p><strong>What is \(\lambda\)?</strong> A non‑negative <strong>damping</strong> parameter (Levenberg–Marquardt). It does <em>not</em> come from the RC physics; it is only a <strong>numerical knob</strong> for the solver. Roughly:</p>
+  <ul>
+    <li><strong>\(\lambda\) small</strong> → the step is close to <strong>Gauss–Newton</strong> (uses \(\mathbf{J}^\top\mathbf{J}\) aggressively).</li>
+    <li><strong>\(\lambda\) large</strong> → the step is <strong>smaller</strong> and behaves more like a short move along the negative gradient of \(\Phi\) (since \(\mathbf{J}^\top\mathbf{r} = \nabla\Phi\)), i.e. more cautious.</li>
+  </ul>
+  <p>In practice: <strong>increase</strong> \(\lambda\) when a proposed step would <strong>increase</strong> \(\Phi\) or is unstable; <strong>decrease</strong> \(\lambda\) when steps are accepted and convergence is healthy.</p>
+</div>
+
+<div class="box why">
+  <p><strong>Why add \(\lambda \mathbf{I}\) to \(\mathbf{J}^\top\mathbf{J}\)?</strong> The Gauss–Newton system is \(\mathbf{J}^\top\mathbf{J}\,\Delta\mathbf{p} = -\mathbf{J}^\top\mathbf{r}\). Two common failures:</p>
+  <ol>
+    <li><strong>Singular or ill‑conditioned</strong> \(\mathbf{J}^\top\mathbf{J}\): the solve for \(\Delta\mathbf{p}\) is badly posed; \(\Delta\mathbf{p}\) can be <em>huge</em> or hypersensitive to tiny errors.</li>
+    <li><strong>Linearization poor</strong> far from the minimum: a full GN step can <strong>overshoot</strong>, so \(\Phi(\mathbf{p}+\Delta\mathbf{p}) &gt; \Phi(\mathbf{p})\).</li>
+  </ol>
+  <p>Replacing \(\mathbf{J}^\top\mathbf{J}\) by \(\mathbf{J}^\top\mathbf{J} + \lambda \mathbf{I}\) gives:</p>
+  <div class="eq">
+  $$(\mathbf{J}^\top \mathbf{J} + \lambda \mathbf{I})\,\Delta\mathbf{p} = -\mathbf{J}^\top \mathbf{r}$$
+  </div>
+  <p><strong>Effects:</strong> (i) With \(\lambda &gt; 0\), the matrix is better conditioned (strictly positive definite in the usual case), so the linear system for \(\Delta\mathbf{p}\) is <strong>more stable</strong> and wild steps from near‑singularity are curbed. (ii) Increasing \(\lambda\) <strong>shrinks</strong> \(\Delta\mathbf{p}\), trading GN aggressiveness for robustness when the quadratic model of \(\Phi\) is unreliable.</p>
+  <p class="note"><strong>One‑line intuition:</strong> GN trusts the linearization fully; LM adds “\(\lambda \mathbf{I}\)” to damp the step—if the full GN move is bad, blend in a shorter, gradient‑like correction.</p>
+</div>
+
+<div class="box do">
+  <p><strong>You do:</strong> Implement the same solve with <code>A = J'*J + lambda*eye(2)</code>, tune \(\lambda\) by hand, or mirror the accept/reject schedule used in your JS fitter.</p>
+</div>
+
+<!-- ========== STAGE 5 ========== -->
+<h2>Stage 5 — MATLAB <code>lsqnonlin</code> (check)</h2>
+<div class="box do">
+  <p><code>lsqnonlin(@(p) residual_rc(p, ts, vs), p0, ...)</code> and compare to your GN iterations.</p>
+</div>
+
+<!-- ========== STAGE 6 ========== -->
+<h2>Stage 6 — Optional: log-domain line fit (warm start only)</h2>
+<div class="box note">
+  <p>If \(V_k &gt; 0\) for all \(k\), then \(\ln V_k = \ln V_0 - t_k/\tau\) is affine in \(t_k\). Linear regression on \((t_k, \ln V_k)\) gives rough \((\ln V_0,\, -1/\tau)\) — useful for \(\mathbf{p}_0\), not a replacement for nonlinear least squares when noise or model mismatch matter.</p>
+</div>
+
+<!-- ========== APPENDIX: PHI, GRADIENT, DESCENT ========== -->
+<h2>Appendix — Why \(\Phi\) decreases: gradient and descent direction</h2>
+
+<p class="note">This section generalizes beyond the RC example. Read the formulas here with MathJax rendering enabled.</p>
+
+<div class="box why">
+  <p><strong>Objective and gradient.</strong> With \(\Phi(\mathbf{p}) = \tfrac{1}{2}\,\|\mathbf{r}(\mathbf{p})\|_2^2\), one has (chain rule):</p>
+  <div class="eq">
+  $$\nabla \Phi(\mathbf{p}) = \mathbf{J}(\mathbf{p})^\top \mathbf{r}(\mathbf{p})$$
+  </div>
+  <p>The gradient is a <strong>vector in \(\mathbb{R}^M\)</strong>. It points in the direction of <em>steepest increase</em> of \(\Phi\). At an unconstrained minimizer, \(\nabla\Phi(\mathbf{p}^\ast)=\mathbf{0}\).</p>
+  <p>It is <strong>not</strong> correct to say the gradient is “negative” as a whole: components can have mixed signs, and the direction depends on where \(\mathbf{p}\) lies.</p>
+</div>
+
+<div class="box why">
+  <p><strong>Directional derivative along a step \(\Delta\mathbf{p}\).</strong> The rate of change of \(\Phi\) as you move from \(\mathbf{p}\) in direction \(\Delta\mathbf{p}\) is</p>
+  <div class="eq">
+  $$\left.\frac{d}{d\alpha}\Phi(\mathbf{p}+\alpha\Delta\mathbf{p})\right|_{\alpha=0}
+  = \nabla\Phi(\mathbf{p})^\top \Delta\mathbf{p}$$
+  </div>
+  <p>A <strong>descent direction</strong> satisfies \(\nabla\Phi(\mathbf{p})^\top \Delta\mathbf{p} &lt; 0\): then for sufficiently small step length, \(\Phi\) <strong>decreases</strong>. That is the precise meaning of “\(\Phi\) goes down because its rate of change along the update is negative.”</p>
+  <p>Gauss–Newton chooses \(\Delta\mathbf{p}\) from the linearized model so that (under standard assumptions) this inner product is negative — a descent step. Levenberg–Marquardt <strong>shrinks</strong> \(\Delta\mathbf{p}\) when needed so that an accepted step still reduces \(\Phi\) (or increases \(\lambda\) until it does).</p>
+</div>
+
+<div class="box why">
+  <p><strong>Linear-in-parameters models (strong case).</strong> If \(\mathbf{r}(\mathbf{p}) = \mathbf{A}\mathbf{p}-\mathbf{b}\) (affine in \(\mathbf{p}\)), then \(\Phi(\mathbf{p})\) is a <strong>convex quadratic</strong>. Gauss–Newton coincides with minimizing that quadratic exactly: <strong>one</strong> solve reaches the global minimizer (in exact arithmetic). Example: scalar \(y_i \approx k x_i\) gives \(\Phi(k)=\tfrac{1}{2}\sum_i (y_i-kx_i)^2\), a parabola in \(k\).</p>
+</div>
+
+<div class="box why">
+  <p><strong>Nonlinear \(\mathbf{r}\) (typical calibration).</strong> Then \(\Phi\) is <strong>not</strong> a global quadratic. There is <strong>no</strong> universal guarantee that every raw GN step reduces \(\Phi\); trust-region / LM damping and step acceptance rules are what enforce <strong>practical</strong> decrease. Convergence is usually <strong>local</strong> (good initial guess, full-rank Jacobian), not “from any start to a global minimum.”</p>
+  <p>Also: \(\Phi\to 0\) only if the model can fit all data exactly (\(\mathbf{r}=\mathbf{0}\)); with noise or model error, the minimum \(\Phi\) is typically <strong>positive</strong>.</p>
+</div>
+
+<hr>
+<p class="note" style="margin-top:2rem;">
+<strong>Progress log:</strong> Record \(\mathbf{p}_0\), first \(\Delta\mathbf{p}\), and converged \(\mathbf{p}\) as you go.
+</p>
+
+</body>
+</html>

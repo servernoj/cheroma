@@ -2,8 +2,4 @@ node_modules/
 dist/
 .env
 .DS_Store
-
-# ESP32 build artifacts (now built in CI)
-esp32c6/build/
-esp32c6/managed_components/
-esp32c6/dependencies.lock
+*.csv

@@ -1,5 +1,7 @@
 import config from '@/config.json' with {type: 'json'}
-import { mMult, mTrans, mOp } from '@/modules/utils.js'
+import { Matrix } from 'ml-matrix'
+import { cosd, sind, rotationMatrix, d2r, r2d } from '@/modules/utils.js'
+
 
 const k2s = Object.entries(config.servos).reduce(
   (acc, [servoName, { kinematics }]) => {
@@ -15,35 +17,16 @@ const k2s = Object.entries(config.servos).reduce(
  */
 const toModel = P => {
   const { roll, pitch, yaw, t } = config.fitting
-  const cr = Math.cos(d2r(roll))
-  const sr = Math.sin(d2r(roll))
-  const cp = Math.cos(d2r(pitch))
-  const sp = Math.sin(d2r(pitch))
-  const cy = Math.cos(d2r(yaw))
-  const sy = Math.sin(d2r(yaw))
-  const Rx = [[1, 0, 0], [0, cr, -sr], [0, sr, cr]]
-  const Ry = [[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]]
-  const Rz = [[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]]
-  const R = mMult(Rz, mMult(Ry, Rx))
-  const P_ =
-    mMult(
-      mTrans(R),
-      mTrans(
-        mOp(
-          [[P.x, P.y, P.z]],
-          [t],
-          (a, b) => a - b
-        )
-      )
-    )
-  return ['x', 'y', 'z'].reduce(
-    /** * @param {*} acc */
-    (acc, key, idx) => {
-      acc[key] = P_[idx][0]
-      return acc
-    },
-    {}
-  )
+  const R = rotationMatrix(roll, pitch, yaw)
+  const pVec = Matrix.columnVector([P.x, P.y, P.z])
+  const tVec = Matrix.columnVector(t)
+  const diff = Matrix.subtract(pVec, tVec)
+  const P_ = R.transpose().mmul(diff)
+  return {
+    x: P_.get(0, 0),
+    y: P_.get(1, 0),
+    z: P_.get(2, 0)
+  }
 }
 
 /**
@@ -56,8 +39,6 @@ const K2S = K => Object.entries(K).reduce(
   {}
 )
 
-const r2d = r => r * 180 / Math.PI
-const d2r = d => d * Math.PI / 180
 
 /**
  * Forward kinematics helper
@@ -69,15 +50,15 @@ const FK_ = ({ q0, q1, q2, q3 }, gamma) => {
   const { L1, L2, L3, H, dX } = config.geom
   gamma = gamma ?? q1 + q2 + q3
   const r = (
-    dX * Math.cos(d2r(q1)) +
-    L1 * Math.sin(d2r(q1)) +
-    L2 * Math.sin(d2r(q1 + q2)) +
-    L3 * Math.sin(d2r(gamma))
+    dX * cosd(q1) +
+    L1 * sind(q1) +
+    L2 * sind(q1 + q2) +
+    L3 * sind(gamma)
   )
   const p = [
-    r * Math.cos(d2r(q0)),
-    r * Math.sin(d2r(q0)),
-    H - dX * Math.sin(d2r(q1)) + L1 * Math.cos(d2r(q1)) + L2 * Math.cos(d2r(q1 + q2)) + L3 * Math.cos(d2r(gamma))
+    r * cosd(q0),
+    r * sind(q0),
+    H - dX * sind(q1) + L1 * cosd(q1) + L2 * cosd(q1 + q2) + L3 * cosd(gamma)
   ]
   return { p }
 }
@@ -117,8 +98,8 @@ const IK = ({ x, y, z }, options) => {
   const { L1, L2, L3, H, dX } = config.geom
   const q0 = Math.atan2(y, x)
   const r = Math.hypot(x, y)
-  const rw = r - L3 * Math.sin(d2r(gamma))
-  const zw = z - H - L3 * Math.cos(d2r(gamma))
+  const rw = r - L3 * sind(gamma)
+  const zw = z - H - L3 * cosd(gamma)
   // L1p = hypot(L1, dX), alpha = atan2(dX, L1)
   // theta1 = q1 + alpha, theta2 = q2 - alpha
   // Standard 2-link solve for (theta1,theta2), then recover (q1,q2).
