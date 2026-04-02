@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import cv2
+from cv2_enumerate_cameras import enumerate_cameras
 import numpy as np
 
 
@@ -24,19 +25,8 @@ def _warmup_reads(cap: cv2.VideoCapture, n: int = 5) -> None:
 @dataclass
 class CameraProbeResult:
     index: int
-    opened: bool
-    frame_read_ok: bool
-    width: float
-    height: float
+    name: str
     backend_name: str
-
-
-def _backend_label(cap: cv2.VideoCapture) -> str:
-    try:
-        b = int(cap.get(cv2.CAP_PROP_BACKEND))
-        return cap.getBackendName() if hasattr(cap, "getBackendName") else str(b)
-    except Exception:
-        return "unknown"
 
 
 def read_single_frame(index: int, warmup_frames: int = 3) -> tuple[bool, np.ndarray | None]:
@@ -45,6 +35,9 @@ def read_single_frame(index: int, warmup_frames: int = 3) -> tuple[bool, np.ndar
     For dev/preview HTTP endpoints; not for high-FPS loops (reopens each time).
     """
     cap = cv2.VideoCapture(index)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('M','J','P','G'))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
     if not cap.isOpened():
         return False, None
     try:
@@ -55,45 +48,27 @@ def read_single_frame(index: int, warmup_frames: int = 3) -> tuple[bool, np.ndar
         cap.release()
 
 
-def probe_cameras(
-    min_index: int = 0,
-    max_index: int = 10,
-    warmup_frames: int = 2,
-) -> list[CameraProbeResult]:
-    """
-    Try ``VideoCapture(i)`` for ``i`` in ``range(min_index, max_index)``.
-    Each index is opened, warmed up, one frame read, then closed.
-
-    On macOS, opening a **missing** low index (often ``0``) can take several seconds.
-    If only a higher index is valid (e.g. built-in stuck at ``1`` after unplugging USB),
-    pass ``min_index=1`` to skip the slow slot.
-    """
+def probe_cameras() -> list[CameraProbeResult]:
     results: list[CameraProbeResult] = []
-    for i in range(min_index, max_index):
+    names = [ci.name for ci in enumerate_cameras()]
+    for i in range(len(names)):
         cap = cv2.VideoCapture(i)
-        opened = cap.isOpened()
         frame_ok = False
-        w, h = 0.0, 0.0
         backend = "n/a"
-        if opened:
-            backend = _backend_label(cap)
-            if warmup_frames > 0:
-                _warmup_reads(cap, warmup_frames)
+        if cap.isOpened():
+            backend = cap.getBackendName()    
+            name = names[i]        
             ok, frame = cap.read()
             frame_ok = bool(ok and frame is not None and frame.size > 0)
-            w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-            h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        cap.release()
-        results.append(
-            CameraProbeResult(
-                index=i,
-                opened=opened,
-                frame_read_ok=frame_ok,
-                width=w,
-                height=h,
-                backend_name=backend,
-            )
-        )
+            if frame_ok:
+                results.append(
+                    CameraProbeResult(
+                        index=i,
+                        name = name,
+                        backend_name=backend,
+                    )
+                )
+        cap.release()        
     return results
 
 
