@@ -10,5 +10,6 @@
     "markdown",
     "latex",
     "plaintext"
-  ]
+  ],
+  "python.defaultInterpreterPath": "${workspaceFolder}/CV/.venv/bin/python"
 }

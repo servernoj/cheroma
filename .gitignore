@@ -3,3 +3,13 @@ dist/
 .env
 .DS_Store
 *.csv
+
+# Python (CV vision server)
+CV/.venv/
+CV/venv/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+.eggs/
