@@ -29,7 +29,7 @@ class CameraProbeResult:
     backend_name: str
 
 
-def read_single_frame(index: int, warmup_frames: int = 3) -> tuple[bool, np.ndarray | None]:
+def read_single_frame(index: int, warmup_frames: int = 5) -> tuple[bool, np.ndarray | None]:
     """
     Open the device at ``index``, optionally discard warmup frames, read one frame, close.
     For dev/preview HTTP endpoints; not for high-FPS loops (reopens each time).
@@ -49,26 +49,26 @@ def read_single_frame(index: int, warmup_frames: int = 3) -> tuple[bool, np.ndar
 
 
 def probe_cameras() -> list[CameraProbeResult]:
+    """One ``VideoCapture(i)`` per device reported by ``enumerate_cameras()`` (same index)."""
     results: list[CameraProbeResult] = []
     names = [ci.name for ci in enumerate_cameras()]
     for i in range(len(names)):
         cap = cv2.VideoCapture(i)
-        frame_ok = False
         backend = "n/a"
         if cap.isOpened():
-            backend = cap.getBackendName()    
-            name = names[i]        
+            backend = cap.getBackendName()
+            name = names[i]
             ok, frame = cap.read()
             frame_ok = bool(ok and frame is not None and frame.size > 0)
             if frame_ok:
                 results.append(
                     CameraProbeResult(
                         index=i,
-                        name = name,
+                        name=name,
                         backend_name=backend,
                     )
                 )
-        cap.release()        
+        cap.release()
     return results
 
 

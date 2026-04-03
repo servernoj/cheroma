@@ -45,9 +45,7 @@ By default the app listens on **127.0.0.1** port **5050**. Override with environ
 | `VISION_PORT`  | `5050`    | Port               |
 | `FLASK_DEBUG`  | `1`       | Set to `0` to disable Flask debug mode |
 | `VISION_CAMERA_INDEX` | `0` | OpenCV camera index (see Webcam section) |
-| `VISION_PROBE_MIN` | `0` | First index to probe (`GET /api/cameras`) |
-| `VISION_PROBE_MAX` | `10` | Probe stops before this index (indices `min` … `max-1`) |
-| `VISION_PROBE_WARMUP` | `2` | Frames discarded after open before each probe read (lower = faster) |
+| `VISION_BOARD_DEBUG_DIR` | *(empty)* | If set, `GET .../frame/board/debug` writes PNG artifacts under this directory and lists them in `saved_files`. |
 
 Example:
 
@@ -59,7 +57,7 @@ VISION_HOST=0.0.0.0 VISION_PORT=5050 FLASK_DEBUG=0 python app.py
 
 OpenCV does not use a device path like `/dev/video0` in your code on macOS. It opens cameras by **integer index**. Order is **not fixed** (built-in vs USB can swap). The backend on macOS is typically **AVFoundation**.
 
-**macOS:** After unplugging a USB camera, the built-in camera may stay at **index 1** while **index 0** is empty. Probing **index 0** can then take **several seconds** before failing. Skip it with `GET /api/cameras?min=1` or `VISION_PROBE_MIN=1`.
+**macOS:** After unplugging a USB camera, the built-in camera may stay at **index 1** while **index 0** is empty. Probing **index 0** can then take **several seconds** before failing.
 
 Use a working index when running your app or scripts:
 
@@ -88,16 +86,21 @@ Expected JSON: `{"status":"ok"}`
 
 ## Camera HTTP API (dev / test)
 
-- **`GET /api/cameras`** — Probes cameras. Returns JSON with **`cameras`** only for indices that **open and return a frame**. Query params: **`min`**, **`max`**, **`warmup`** (override env defaults for that request). Example: `?min=1&max=4` skips slow empty index 0 on some Macs.
+- **`GET /api/cameras`** — Runs `probe_cameras()`: one OpenCV index per device from `enumerate_cameras()`, keeping index and name aligned. JSON **`cameras`**: those that open and return a frame. If devices change while the process is running, restart the app so enumeration refreshes.
 
-- **`GET /api/camera/<index>/frame`** — Opens device `index`, captures one frame, returns **JPEG** (`image/jpeg`). Optional query: `warmup` (default `3`), `quality` (default `85`). Reopens the camera each request — fine for testing, not for streaming.
+- **`GET /api/cameras/<index>/frame`** — One **JPEG** frame from that index. Query: **`warmup`** (default `0`), **`quality`** (default `85`). Reopens the camera each request.
+
+- **`GET /api/cameras/<index>/frame/board`** — Same capture, then **detect the largest quadrilateral** (assumed board outline), **perspective-warp** to a square. Query: **`warmup`**, **`quality`**, **`size`** (output side in pixels, default **800**, max **4096**). Returns **422** if no quad is found. Works best with a **clear board edge** vs background; tune later via `vision.board.find_board_corners` parameters in code.
+
+- **`GET /api/cameras/<index>/frame/board/debug`** — Same frame; **JSON** with detection stats (`reason`, contour counts, quad areas, etc.). If **`VISION_BOARD_DEBUG_DIR`** is set (e.g. `/tmp/board-debug`), writes numbered PNGs per step: **`01_small_bgr`** … **`06_overlay`** (see `save_board_debug_images` in `vision/board.py`) and lists paths in **`saved_files`**. No image data in the response body.
 
 Examples:
 
 ```bash
 curl -s http://127.0.0.1:5050/api/cameras | python3 -m json.tool
-curl -s "http://127.0.0.1:5050/api/cameras?min=1&max=6" | python3 -m json.tool
-curl -s -o /tmp/cam0.jpg "http://127.0.0.1:5050/api/camera/0/frame"
+curl -s -o /tmp/cam0.jpg "http://127.0.0.1:5050/api/cameras/0/frame"
+curl -s -o /tmp/board.jpg "http://127.0.0.1:5050/api/cameras/0/frame/board?size=800"
+VISION_BOARD_DEBUG_DIR=/tmp/board-debug curl -s "http://127.0.0.1:5050/api/cameras/0/frame/board/debug" | python3 -m json.tool
 ```
 
 ## API stubs (to be implemented)
