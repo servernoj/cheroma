@@ -7,19 +7,20 @@ board boundaries vs background; lighting and clutter affect reliability.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import cv2
 import numpy as np
 
 # --- Single source of truth for board outline detection (Canny / contour pipeline) ---
-_DEFAULT_MAX_DETECTION_DIM = 960
-_DEFAULT_CANNY_LOW = 90
+_DEFAULT_MAX_DETECTION_DIM = 1920
+_DEFAULT_CANNY_LOW = 50
 _DEFAULT_CANNY_HIGH = 190
 _DEFAULT_APPROX_EPS_RATIO = 0.02
 _DEFAULT_MIN_AREA_RATIO = 0.08
 _DEFAULT_GAUSSIAN_BLUR_KSIZE = 5
-_DEFAULT_DILATE_KERNEL_SIZE = 3
+_DEFAULT_DILATE_KERNEL_SIZE = 2
 _DEFAULT_DILATE_ITERATIONS = 1
 
 
@@ -35,78 +36,38 @@ def _order_corners_tl_tr_br_bl(pts: np.ndarray) -> np.ndarray:
     rect[3] = pts[np.argmax(d)]
     return rect
 
-
-def analyze_board_detection(
-    bgr: np.ndarray,
-    *,
-    max_detection_dim: int = _DEFAULT_MAX_DETECTION_DIM,
-    canny_low: int = _DEFAULT_CANNY_LOW,
-    canny_high: int = _DEFAULT_CANNY_HIGH,
-    approx_eps_ratio: float = _DEFAULT_APPROX_EPS_RATIO,
-    min_area_ratio: float = _DEFAULT_MIN_AREA_RATIO,
-    gaussian_blur_ksize: int = _DEFAULT_GAUSSIAN_BLUR_KSIZE,
-    dilate_kernel_size: int = _DEFAULT_DILATE_KERNEL_SIZE,
-    dilate_iterations: int = _DEFAULT_DILATE_ITERATIONS,
-) -> dict[str, Any]:
-    """
-    Run the same pipeline as :func:`find_board_corners` and return corners plus debug data.
-
-    Use this headless: inspect intermediate arrays (``small_bgr``, ``gray``, …) or
-    :func:`save_board_debug_images`, or :func:`debug_payload_for_json` for JSON stats.
-    """
-    empty: dict[str, Any] = {
-        "ok": False,
-        "corners": None,
-        "scale": 1.0,
-        "image_size": [0, 0],
-        "detection_size": [0, 0],
-        "contour_count": 0,
-        "quad_candidate_count": 0,
-        "quad_candidate_areas": [],
-        "best_quad_area": None,
-        "reason": "empty_input",
-        "small_bgr": None,
-        "gray": None,
-        "gray_blur": None,
-        "edges_canny": None,
-        "edges_dilated": None,
-        "overlay": None,
-    }
+def find_board_corners(bgr: np.ndarray, **kwargs: Any) -> np.ndarray | None:
     if bgr is None or bgr.size == 0:
-        return empty
-
+        return None
     h0, w0 = bgr.shape[:2]
-    empty["image_size"] = [w0, h0]
-    scale = min(1.0, max_detection_dim / max(h0, w0))
+    scale = min(1.0, _DEFAULT_MAX_DETECTION_DIM / max(h0, w0))
     if scale < 1.0:
         small = cv2.resize(bgr, (int(w0 * scale), int(h0 * scale)), interpolation=cv2.INTER_AREA)
     else:
         small = bgr.copy()
-
     dh, dw = small.shape[:2]
-    empty["detection_size"] = [dw, dh]
-    empty["scale"] = scale
-
-    gk = max(1, int(gaussian_blur_ksize)) | 1  # odd kernel size
-    dk = max(1, int(dilate_kernel_size))
-    dit = max(0, int(dilate_iterations))
-
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-    gray_blur = cv2.GaussianBlur(gray, (gk, gk), 0)
-    edges = cv2.Canny(gray_blur, canny_low, canny_high)
-    if dit <= 0:
+    blur = cv2.GaussianBlur(
+        gray, 
+        (_DEFAULT_GAUSSIAN_BLUR_KSIZE, _DEFAULT_GAUSSIAN_BLUR_KSIZE), 
+        0
+    )
+    # clahe = cv2.createCLAHE(2.5, (8,8)).apply(blur)
+    edges = cv2.Canny(blur, _DEFAULT_CANNY_LOW, _DEFAULT_CANNY_HIGH) 
+    if _DEFAULT_DILATE_ITERATIONS <= 0:
         edges_d = edges.copy()
     else:
-        edges_d = cv2.dilate(edges, np.ones((dk, dk), np.uint8), iterations=dit)
-
+        edges_d = cv2.dilate(
+            edges, 
+            np.ones((_DEFAULT_DILATE_KERNEL_SIZE, _DEFAULT_DILATE_KERNEL_SIZE), np.uint8), 
+            iterations=_DEFAULT_DILATE_ITERATIONS
+        )
     contours, _ = cv2.findContours(edges_d, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     img_area = float(dh * dw)
-    min_area = min_area_ratio * img_area
-
+    min_area = _DEFAULT_MIN_AREA_RATIO * img_area
     overlay = small.copy()
     cv2.drawContours(overlay, contours, -1, (0, 255, 0), 1)
-
-    best: tuple[float, np.ndarray] | None = None
+    best: tuple[float, np.ndarray, np.ndarray] | None = None
     quad_areas: list[float] = []
     for cnt in contours:
         area = cv2.contourArea(cnt)
@@ -115,105 +76,29 @@ def analyze_board_detection(
         peri = cv2.arcLength(cnt, True)
         if peri < 1e-6:
             continue
-        approx = cv2.approxPolyDP(cnt, approx_eps_ratio * peri, True)
+        approx = cv2.approxPolyDP(cnt, _DEFAULT_APPROX_EPS_RATIO * peri, True)
         if len(approx) == 4 and cv2.isContourConvex(approx):
             quad_areas.append(float(area))
             if area > (best[0] if best else 0):
-                best = (area, approx.reshape(4, 2).astype(np.float32))
-                cv2.polylines(overlay, [approx], True, (0, 0, 255), 2)
+                best = (area, approx.reshape(4, 2).astype(np.float32), approx)
 
-    out: dict[str, Any] = {
-        "ok": best is not None,
-        "corners": None,
-        "scale": scale,
-        "image_size": [w0, h0],
-        "detection_size": [dw, dh],
-        "contour_count": len(contours),
-        "quad_candidate_count": len(quad_areas),
-        "quad_candidate_areas": sorted(quad_areas, reverse=True)[:20],
-        "best_quad_area": float(best[0]) if best else None,
-        "reason": "ok" if best else ("no_quadrilateral" if contours else "no_contours"),
-        "small_bgr": small,
-        "gray": gray,
-        "gray_blur": gray_blur,
-        "edges_canny": edges,
-        "edges_dilated": edges_d,
-        "overlay": overlay,
-    }
+    if best is not None:
+        cv2.polylines(overlay, [best[2]], True, (0, 0, 255), 2)
+    debug_dir = os.environ.get("VISION_BOARD_DEBUG_DIR", "").strip()
+    if debug_dir:
+        os.makedirs(debug_dir, exist_ok=True)
+        cv2.imwrite(os.path.join(debug_dir, f"overlay.png"), overlay)
 
     if best is None:
-        return out
-
+        return None
+    
     corners = _order_corners_tl_tr_br_bl(best[1])
     if scale < 1.0:
         corners = corners.copy()
         corners[:, 0] /= scale
         corners[:, 1] /= scale
-    out["corners"] = corners
-    out["ok"] = True
-    out["reason"] = "ok"
-    return out
 
-
-def find_board_corners(bgr: np.ndarray, **kwargs: Any) -> np.ndarray | None:
-    """
-    Find the four corners of the dominant quadrilateral (expected board outline).
-
-    Keyword args override :func:`analyze_board_detection` defaults (same single source).
-
-    Returns ``(4, 2)`` float32 points in **original image coordinates**, or ``None``.
-    """
-    r = analyze_board_detection(bgr, **kwargs)
-    c = r.get("corners")
-    return np.asarray(c, dtype=np.float32) if c is not None else None
-
-
-def debug_payload_for_json(analysis: dict[str, Any]) -> dict[str, Any]:
-    """Build a JSON-serializable dict of detection stats (no images, no raw numpy)."""
-    return {
-        "ok": analysis.get("ok"),
-        "reason": analysis.get("reason"),
-        "image_size": analysis.get("image_size"),
-        "detection_size": analysis.get("detection_size"),
-        "scale": analysis.get("scale"),
-        "contour_count": analysis.get("contour_count"),
-        "quad_candidate_count": analysis.get("quad_candidate_count"),
-        "quad_candidate_areas": analysis.get("quad_candidate_areas"),
-        "best_quad_area": analysis.get("best_quad_area"),
-    }
-
-
-def save_board_debug_images(
-    analysis: dict[str, Any],
-    directory: str,
-    *,
-    prefix: str = "board",
-) -> list[str]:
-    """
-    Write intermediate pipeline images from :func:`analyze_board_detection` to PNG files
-    (detection resolution: resize → gray → blur → Canny → dilate → overlay).
-    Returns list of paths written, in pipeline order.
-    """
-    import os
-
-    steps: list[tuple[str, str]] = [
-        ("small_bgr", "01_small_bgr.png"),
-        ("gray", "02_gray.png"),
-        ("gray_blur", "03_gray_blur.png"),
-        ("edges_canny", "04_canny.png"),
-        ("edges_dilated", "05_canny_dilated.png"),
-        ("overlay", "06_overlay.png"),
-    ]
-    paths: list[str] = []
-    os.makedirs(directory, exist_ok=True)
-    for key, fname in steps:
-        img = analysis.get(key)
-        if img is None:
-            continue
-        p = os.path.join(directory, f"{prefix}_{fname}")
-        cv2.imwrite(p, img)
-        paths.append(p)
-    return paths
+    return corners
 
 
 def warp_board_square(

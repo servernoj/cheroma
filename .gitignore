@@ -13,3 +13,4 @@ CV/venv/
 .Python
 *.egg-info/
 .eggs/
+debug/

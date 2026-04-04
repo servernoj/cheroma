@@ -17,10 +17,7 @@ from vision.aruco_sheet import (
     list_dictionary_names,
 )
 from vision.board import (
-    analyze_board_detection,
-    debug_payload_for_json,
     extract_board,
-    save_board_debug_images,
 )
 from vision.camera import probe_cameras, read_single_frame
 from vision.board_aruco import (
@@ -253,36 +250,6 @@ def create_app() -> Flask:
             mimetype="image/jpeg",
             headers={"Cache-Control": "no-store"},
         )
-
-    @app.get("/api/cameras/<int:index>/frame/board/debug")
-    def camera_frame_board_debug(index: int):
-        """
-        Capture one frame; return JSON detection stats. When VISION_BOARD_DEBUG_DIR is set,
-        writes pipeline PNGs there (no base64 in the response).
-        """
-        try:
-            warmup = int(request.args.get("warmup", "0"))
-        except ValueError:
-            warmup = 0
-
-        ok, frame = read_single_frame(index, warmup_frames=max(0, warmup))
-        if not ok or frame is None:
-            return jsonify(error="could not capture frame", index=index), 503
-
-        analysis = analyze_board_detection(frame)
-        payload = debug_payload_for_json(analysis)
-        payload["index"] = index
-        payload["detection_ok"] = analysis.get("ok")
-
-        debug_dir = os.environ.get("VISION_BOARD_DEBUG_DIR", "").strip()
-        if debug_dir:
-            payload["saved_files"] = save_board_debug_images(
-                analysis, debug_dir, prefix=f"cam{index}"
-            )
-        else:
-            payload["saved_files"] = []
-
-        return jsonify(payload)
 
     @app.post("/api/reset")
     def reset():
