@@ -17,7 +17,12 @@ from vision.aruco_sheet import (
     list_dictionary_names,
 )
 from vision.board import (
+    clear_stored_calibration,
     extract_board,
+    find_board_corners,
+    get_stored_calibration,
+    get_stored_calibration_record,
+    set_stored_calibration,
 )
 from vision.camera import probe_cameras, read_single_frame
 from vision.board_aruco import (
@@ -167,7 +172,7 @@ def create_app() -> Flask:
         """Probe a range of indices; return only cameras that open and yield a frame."""
         return jsonify(cameras=[asdict(ci) for ci in probe_cameras()])
 
-    @app.get("/api/cameras/<int:index>/frame")
+    @app.get("/api/cameras/<int:index>")
     def camera_frame(index: int):
         """Return one JPEG frame from the given capture index (dev/test)."""
         try:
@@ -194,8 +199,8 @@ def create_app() -> Flask:
             headers={"Cache-Control": "no-store"},
         )
 
-    @app.get("/api/cameras/<int:index>/frame/board-aruco")
-    def camera_frame_board_aruco(index: int):
+    @app.get("/api/cameras/<int:index>/board-aruco")
+    def camera_board_aruco(index: int):
         ok, frame = read_single_frame(index)
         if not ok or frame is None:
             return jsonify(error="could not capture frame", index=index), 503
@@ -213,9 +218,56 @@ def create_app() -> Flask:
             headers={"Cache-Control": "no-store"},
         )
 
-    @app.get("/api/cameras/<int:index>/frame/board")
-    def camera_frame_board(index: int):
-        """Capture one frame, detect board quad, return warped square JPEG (dev)."""
+    @app.get("/api/cameras/<int:index>/board/calibration")
+    def board_calibration_get(index: int):
+        """
+        Same JSON shape as successful POST (and on-disk file): ``ok``, ``frame_width``,
+        ``frame_height``, ``corners``. Index is for URL consistency only.
+        """
+        record = get_stored_calibration_record()
+        if record is None:
+            return jsonify(ok=False)
+        return jsonify(ok=True, **record)
+
+    @app.delete("/api/cameras/<int:index>/board/calibration")
+    def board_calibration_delete(index: int):
+        """Remove persisted board calibration. Index is for URL consistency only."""
+        cleared = clear_stored_calibration()
+        return jsonify(ok=True, cleared=cleared, index=index)
+
+    @app.post("/api/cameras/<int:index>/board/calibration")
+    def board_calibration_post(index: int):
+        """
+        Capture one frame from ``index``, run edge-based board detection, and
+        persist a single global quad (not keyed by camera).
+        """
+        try:
+            warmup = int(request.args.get("warmup", "0"))
+        except ValueError:
+            warmup = 0
+
+        ok, frame = read_single_frame(index, warmup_frames=max(0, warmup))
+        if not ok or frame is None:
+            return jsonify(error="could not capture frame", index=index), 503
+
+        h, w = frame.shape[:2]
+        corners = find_board_corners(frame)
+        if corners is None:
+            return jsonify(
+                error="board outline not found",
+                hint="adjust lighting/board edge visibility or VISION_BOARD_DEBUG_DIR",
+            ), 422
+
+        payload = set_stored_calibration(corners, w, h)
+        return jsonify(ok=True, **payload)
+
+    @app.get("/api/cameras/<int:index>/board")
+    def camera_board(index: int):
+        """
+        Perspective-warped square JPEG using **persisted calibration** only.
+        Requires POST ``/api/cameras/<index>/board/calibration`` first; returns
+        **422** if missing or frame size does not match stored calibration.
+        """
         try:
             warmup = int(request.args.get("warmup", "0"))
         except ValueError:
@@ -234,9 +286,20 @@ def create_app() -> Flask:
         if not ok or frame is None:
             return jsonify(error="could not capture frame", index=index), 503
 
-        warped, _corners = extract_board(frame, out_size=out_size)
+        fh, fw = frame.shape[:2]
+        cal_corners, cal_status = get_stored_calibration(fw, fh)
+        if cal_status != "ok" or cal_corners is None:
+            return (
+                jsonify(
+                    error="board calibration unavailable",
+                    hint="POST /api/cameras/<index>/board/calibration first",
+                ),
+                422,
+            )
+
+        warped, _ = extract_board(frame, out_size=out_size, corners=cal_corners)
         if warped is None:
-            return jsonify(error="board outline not found", index=index), 422
+            return jsonify(error="warp failed", index=index), 500
 
         enc_ok, buf = cv2.imencode(
             ".jpg",
@@ -248,7 +311,10 @@ def create_app() -> Flask:
         return Response(
             buf.tobytes(),
             mimetype="image/jpeg",
-            headers={"Cache-Control": "no-store"},
+            headers={
+                "Cache-Control": "no-store",
+                "X-Board-Warp-Source": "calibration",
+            },
         )
 
     @app.post("/api/reset")

@@ -45,7 +45,8 @@ By default the app listens on **127.0.0.1** port **5050**. Override with environ
 | `VISION_PORT`  | `5050`    | Port               |
 | `FLASK_DEBUG`  | `1`       | Set to `0` to disable Flask debug mode |
 | `VISION_CAMERA_INDEX` | `0` | OpenCV camera index (see Webcam section) |
-| `VISION_BOARD_DEBUG_DIR` | *(empty)* | If set, `GET .../frame/board/debug` writes PNG artifacts under this directory and lists them in `saved_files`. |
+| `VISION_BOARD_DEBUG_DIR` | *(empty)* | If set, edge-based `find_board_corners` writes `overlay.png` there (contours + chosen quad). |
+| `VISION_BOARD_CALIBRATION_FILE` | `CV/board_calibration.json` | Single global board quad (full-frame corners + frame size). |
 
 Example:
 
@@ -88,19 +89,26 @@ Expected JSON: `{"status":"ok"}`
 
 - **`GET /api/cameras`** — Runs `probe_cameras()`: one OpenCV index per device from `enumerate_cameras()`, keeping index and name aligned. JSON **`cameras`**: those that open and return a frame. If devices change while the process is running, restart the app so enumeration refreshes.
 
-- **`GET /api/cameras/<index>/frame`** — One **JPEG** frame from that index. Query: **`warmup`** (default `0`), **`quality`** (default `85`). Reopens the camera each request.
+- **`GET /api/cameras/<index>`** — One **JPEG** frame from that index. Query: **`warmup`** (default `0`), **`quality`** (default `85`). Reopens the camera each request.
 
-- **`GET /api/cameras/<index>/frame/board`** — Same capture, then **detect the largest quadrilateral** (assumed board outline), **perspective-warp** to a square. Query: **`warmup`**, **`quality`**, **`size`** (output side in pixels, default **800**, max **4096**). Returns **422** if no quad is found. Works best with a **clear board edge** vs background; tune later via `vision.board.find_board_corners` parameters in code.
+- **`GET /api/cameras/<index>/board`** — Warped **JPEG** using **saved calibration** only (no live edge detection). Query: **`warmup`**, **`quality`**, **`size`**. Returns **422** if calibration is missing or frame size does not match (recalibrate after resolution change).
 
-- **`GET /api/cameras/<index>/frame/board/debug`** — Same frame; **JSON** with detection stats (`reason`, contour counts, quad areas, etc.). If **`VISION_BOARD_DEBUG_DIR`** is set (e.g. `/tmp/board-debug`), writes numbered PNGs per step: **`01_small_bgr`** … **`06_overlay`** (see `save_board_debug_images` in `vision/board.py`) and lists paths in **`saved_files`**. No image data in the response body.
+- **`GET /api/cameras/<index>/board/calibration`** — Same JSON as a successful **POST** and the on-disk file: `ok`, and when calibrated `frame_width`, `frame_height`, `corners` (4×2). Returns `{"ok": false}` when none or invalid file. No capture. Calibration is global; the path index is not persisted.
+
+- **`POST /api/cameras/<index>/board/calibration`** — Capture one frame from that index, run edge detection, **replace** stored calibration with one quad. OpenCV index is only used to open the device; it is not persisted. Returns **422** if no quad found.
+
+- **`DELETE /api/cameras/<index>/board/calibration`** — Clear saved calibration (same global state for any index).
+
+- **`GET /api/cameras/<index>/board-aruco`** — Dev endpoint (ArUco path); returns a JPEG (see `board_aruco`).
 
 Examples:
 
 ```bash
 curl -s http://127.0.0.1:5050/api/cameras | python3 -m json.tool
-curl -s -o /tmp/cam0.jpg "http://127.0.0.1:5050/api/cameras/0/frame"
-curl -s -o /tmp/board.jpg "http://127.0.0.1:5050/api/cameras/0/frame/board?size=800"
-VISION_BOARD_DEBUG_DIR=/tmp/board-debug curl -s "http://127.0.0.1:5050/api/cameras/0/frame/board/debug" | python3 -m json.tool
+curl -s -o /tmp/cam0.jpg "http://127.0.0.1:5050/api/cameras/0"
+curl -s http://127.0.0.1:5050/api/cameras/0/board/calibration | python3 -m json.tool
+curl -s -X POST "http://127.0.0.1:5050/api/cameras/0/board/calibration"
+curl -s -o /tmp/board.jpg "http://127.0.0.1:5050/api/cameras/0/board?size=800"
 ```
 
 ## API stubs (to be implemented)

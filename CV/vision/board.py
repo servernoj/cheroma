@@ -7,7 +7,9 @@ board boundaries vs background; lighting and clutter affect reliability.
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import Any
 
 import cv2
@@ -119,14 +121,126 @@ def extract_board(
     bgr: np.ndarray,
     *,
     out_size: int = 800,
+    corners: np.ndarray | None = None,
     **find_kw: Any,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """
-    Find board corners and return ``(warped_bgr, corners)`` or ``(None, None)``.
-    ``find_kw`` is passed to :func:`find_board_corners`.
+    Return ``(warped_bgr, corners)`` or ``(None, None)``.
+
+    If ``corners`` is a 4×2 float32 array (TL, TR, BR, BL in image space), skip
+    detection and warp using those. Otherwise ``find_board_corners`` is used;
+    ``find_kw`` is passed through (currently unused).
     """
-    corners = find_board_corners(bgr, **find_kw)
-    if corners is None:
+    if corners is not None:
+        c = np.asarray(corners, dtype=np.float32).reshape(4, 2)
+        warped = warp_board_square(bgr, c, out_size=out_size)
+        return warped, c
+
+    found = find_board_corners(bgr, **find_kw)
+    if found is None:
         return None, None
-    warped = warp_board_square(bgr, corners, out_size=out_size)
-    return warped, corners
+    warped = warp_board_square(bgr, found, out_size=out_size)
+    return warped, found
+
+
+# --- Persisted board calibration (single global quad, full-frame coordinates) ---
+# File lives next to the vision package: ``CV/board_calibration.json`` unless
+# ``VISION_BOARD_CALIBRATION_FILE`` is set.
+
+
+def calibration_file_path() -> Path:
+    raw = os.environ.get("VISION_BOARD_CALIBRATION_FILE", "").strip()
+    return Path(raw) if raw else Path(__file__).resolve().parent.parent / "board_calibration.json"
+
+
+def _load_calibration_document() -> dict[str, Any] | None:
+    path = calibration_file_path()
+    if not path.is_file():
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else None
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _write_calibration_document(data: dict[str, Any]) -> None:
+    path = calibration_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    tmp.replace(path)
+
+
+def _calibration_record_from_doc(doc: dict[str, Any]) -> dict[str, Any] | None:
+    """Parse ``frame_width``, ``frame_height``, ``corners``; same shape as ``set_stored_calibration`` returns."""
+    try:
+        fw = int(doc["frame_width"])
+        fh = int(doc["frame_height"])
+        corners = doc["corners"]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not isinstance(corners, list) or len(corners) != 4:
+        return None
+    pts: list[list[float]] = []
+    for p in corners:
+        if not isinstance(p, (list, tuple)) or len(p) != 2:
+            return None
+        pts.append([float(p[0]), float(p[1])])
+    return {"frame_width": fw, "frame_height": fh, "corners": pts}
+
+
+def get_stored_calibration_record() -> dict[str, Any] | None:
+    """On-disk calibration as ``frame_width`` / ``frame_height`` / ``corners``, or ``None`` if missing/invalid."""
+    doc = _load_calibration_document()
+    if doc is None:
+        return None
+    return _calibration_record_from_doc(doc)
+
+
+def get_stored_calibration(
+    frame_width: int, frame_height: int
+) -> tuple[np.ndarray | None, str]:
+    """
+    Load the single stored quad if present and ``frame_width`` / ``frame_height``
+    match. Returns ``(corners, status)`` with status ``ok``, ``none``, ``invalid``,
+    or ``size_mismatch``.
+    """
+    doc = _load_calibration_document()
+    if doc is None:
+        return None, "none"
+    record = _calibration_record_from_doc(doc)
+    if record is None:
+        return None, "invalid"
+    if record["frame_width"] != int(frame_width) or record["frame_height"] != int(frame_height):
+        return None, "size_mismatch"
+    return np.array(record["corners"], dtype=np.float32), "ok"
+
+
+def set_stored_calibration(
+    corners: np.ndarray, frame_width: int, frame_height: int
+) -> dict[str, Any]:
+    """Replace on-disk calibration with one 4×2 quad (TL, TR, BR, BL)."""
+    c = corners.reshape(4, 2).astype(float).tolist()
+    fw, fh = int(frame_width), int(frame_height)
+    doc: dict[str, Any] = {
+        "frame_width": fw,
+        "frame_height": fh,
+        "corners": c,
+    }
+    _write_calibration_document(doc)
+    return {"frame_width": fw, "frame_height": fh, "corners": c}
+
+
+def clear_stored_calibration() -> bool:
+    """Remove the calibration file. Returns whether a file was deleted."""
+    path = calibration_file_path()
+    if not path.is_file():
+        return False
+    path.unlink()
+    return True
+
+
