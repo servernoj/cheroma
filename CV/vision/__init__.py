@@ -8,6 +8,7 @@ from .board import (
     save_board_debug_images,
     warp_board_square,
 )
+
 from .camera import (
     WebcamCapture,
     probe_cameras,

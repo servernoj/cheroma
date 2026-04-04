@@ -176,49 +176,84 @@ def render_marker_sheet_png(
     pad_px: int = 32,
     cols: int | None = None,
     label: bool = True,
+    inverted: bool = False,
+    padding_ring_px: int = 20,
+    cut_outline_px: int = 1,
 ) -> tuple[bytes, dict]:
     """
-    Draw all markers on a white canvas; return PNG bytes and metadata for headers.
+    Draw markers on a white canvas with a **padding ring** around each (sharp corners).
+
+    The ring uses the color **opposite** to the marker's outer rim: white pad for
+    normal (black) markers, black pad for inverted (white-rim) markers. When the pad
+    is white, a thin **black** rectangle is drawn on the outer edge of the full tile
+    (cutting line). Inverted tiles omit that line so the black pad stays clean.
     """
     if not marker_ids:
         raise ValueError("marker_ids must be non-empty")
+
+    pr = max(0, int(padding_ring_px))
+    total_side = marker_side_px + 2 * pr
 
     n = len(marker_ids)
     if cols is None:
         cols = max(1, int(math.ceil(math.sqrt(n))))
     rows = int(math.ceil(n / cols))
 
-    label_h = 22 if label else 0
-    cell_w = marker_side_px + gap_px
-    row_h = marker_side_px + label_h + gap_px
+    label_h = 28 if label else 0
+    cell_w = total_side + gap_px
+    row_h = total_side + label_h + gap_px
     w = pad_px * 2 + cols * cell_w - gap_px
     h = pad_px * 2 + rows * row_h - (gap_px if rows else 0)
     canvas = np.full((h, w), 255, dtype=np.uint8)
 
     border_bits = 1
+    cut_t = max(0, min(4, int(cut_outline_px)))
     meta: dict = {
         "marker_side_px": marker_side_px,
+        "padding_ring_px": pr,
+        "cut_outline_px": cut_t if not inverted else 0,
+        "total_tile_side_px": total_side,
         "gap_px": gap_px,
         "cols": cols,
         "rows": rows,
         "canvas_wh": [w, h],
+        "inverted": inverted,
     }
 
     for idx, mid in enumerate(marker_ids):
         r, c = divmod(idx, cols)
         x0 = pad_px + c * cell_w
         y0 = pad_px + r * row_h
-        roi = canvas[y0 : y0 + marker_side_px, x0 : x0 + marker_side_px]
+        # Opposite rim: normal → white pad; inverted (white rim) → black pad
+        pad_color = 0 if inverted else 255
+        tile = canvas[y0 : y0 + total_side, x0 : x0 + total_side]
+        tile[:] = pad_color
+
+        mx = x0 + pr
+        my = y0 + pr
+        roi = canvas[my : my + marker_side_px, mx : mx + marker_side_px]
         cv2.aruco.generateImageMarker(
             aruco_dict, mid, marker_side_px, roi, border_bits
         )
+        if inverted:
+            cv2.bitwise_not(roi, roi)
+
+        if not inverted and cut_t > 0:
+            cv2.rectangle(
+                canvas,
+                (x0, y0),
+                (x0 + total_side - 1, y0 + total_side - 1),
+                0,
+                cut_t,
+            )
+
         if label:
             cv2.putText(
                 canvas,
                 f"id={mid}",
-                (x0, y0 + marker_side_px + 18),
+                (x0, y0 + total_side + 20),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.45,
+                0.5,
                 0,
                 1,
                 cv2.LINE_AA,
@@ -279,6 +314,9 @@ def build_marker_sheet(
     gap_px: int = 24,
     pad_px: int = 32,
     cols: int | None = None,
+    inverted: bool = False,
+    padding_ring_px: int = 20,
+    cut_outline_px: int = 1,
 ) -> tuple[bytes, dict]:
     """
     Full pipeline: resolve dictionary, optimize IDs, render PNG.
@@ -296,6 +334,9 @@ def build_marker_sheet(
         pad_px=pad_px,
         cols=cols,
         label=True,
+        inverted=inverted,
+        padding_ring_px=padding_ring_px,
+        cut_outline_px=cut_outline_px,
     )
     info = {
         "dictionary": dictionary_name.strip().upper(),
@@ -315,6 +356,9 @@ def build_marker_sheet_pdf(
     pad_px: int = 32,
     cols: int | None = None,
     dpi: float = 300.0,
+    inverted: bool = False,
+    padding_ring_px: int = 20,
+    cut_outline_px: int = 1,
 ) -> tuple[bytes, dict]:
     """
     Same as ``build_marker_sheet``, but returns a one-page PDF with page dimensions
@@ -327,6 +371,9 @@ def build_marker_sheet_pdf(
         gap_px=gap_px,
         pad_px=pad_px,
         cols=cols,
+        inverted=inverted,
+        padding_ring_px=padding_ring_px,
+        cut_outline_px=cut_outline_px,
     )
     pdf, pdf_meta = png_bytes_to_pdf_with_dpi(png, dpi)
     info["export_dpi"] = pdf_meta["dpi"]

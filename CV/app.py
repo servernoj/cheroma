@@ -23,6 +23,9 @@ from vision.board import (
     save_board_debug_images,
 )
 from vision.camera import probe_cameras, read_single_frame
+from vision.board_aruco import (
+    extract_board as extract_board_aruco
+)
 
 from dotenv import load_dotenv
 load_dotenv() 
@@ -46,7 +49,10 @@ def create_app() -> Flask:
 
         Query: ``count`` (required), ``dictionary`` (default DICT_4X4_250),
         ``format`` (``pdf`` default, or ``png``), ``dpi`` (PDF only, default 300),
-        ``marker_side_px``, ``gap_px``, ``pad_px``, ``cols`` (optional layout).
+        ``marker_side_px``, ``gap_px``, ``pad_px``, ``cols`` (optional layout),
+        ``inverted`` (``0``/``1``, default ``0``),
+        ``padding_ring_px`` (default 20) — opposite-color rim around each marker,
+        ``cut_outline_px`` (0–4, default 1) — black cutting line on the outer edge when pad is white.
         """
         raw = request.args.get("count")
         if raw is None or str(raw).strip() == "":
@@ -81,6 +87,18 @@ def create_app() -> Flask:
             if cols < 1:
                 return jsonify(error="cols must be >= 1"), 400
 
+        inv_raw = request.args.get("inverted", "0").strip().lower()
+        inverted = inv_raw in ("1", "true", "yes", "on")
+        try:
+            padding_ring_px = int(request.args.get("padding_ring_px", "20"))
+            cut_outline_px = int(request.args.get("cut_outline_px", "1"))
+        except ValueError:
+            return jsonify(error="padding_ring_px and cut_outline_px must be integers"), 400
+        if padding_ring_px < 0 or padding_ring_px > 400:
+            return jsonify(error="padding_ring_px must be between 0 and 400"), 400
+        if cut_outline_px < 0 or cut_outline_px > 4:
+            return jsonify(error="cut_outline_px must be between 0 and 4"), 400
+
         fmt = request.args.get("format", "pdf").strip().lower()
         if fmt not in ("pdf", "png"):
             return jsonify(error="format must be pdf or png"), 400
@@ -104,6 +122,9 @@ def create_app() -> Flask:
                     pad_px=max(8, min(400, pad_px)),
                     cols=cols,
                     dpi=dpi,
+                    inverted=inverted,
+                    padding_ring_px=padding_ring_px,
+                    cut_outline_px=cut_outline_px,
                 )
                 mime = "application/pdf"
             else:
@@ -114,6 +135,9 @@ def create_app() -> Flask:
                     gap_px=max(0, min(200, gap_px)),
                     pad_px=max(8, min(400, pad_px)),
                     cols=cols,
+                    inverted=inverted,
+                    padding_ring_px=padding_ring_px,
+                    cut_outline_px=cut_outline_px,
                 )
                 mime = "image/png"
         except ValueError as e:
@@ -126,6 +150,10 @@ def create_app() -> Flask:
             "X-Aruco-Min-Pairwise-Hamming": str(info["min_pairwise_hamming"]),
             "X-Aruco-Marker-Ids": ",".join(str(i) for i in ids),
             "X-Aruco-Format": fmt,
+            "X-Aruco-Padding-Ring-Px": str(info.get("padding_ring_px", "")),
+            "X-Aruco-Cut-Outline-Px": str(info.get("cut_outline_px", "")),
+            "X-Aruco-Total-Tile-Side-Px": str(info.get("total_tile_side_px", "")),
+            "X-Aruco-Inverted": "1" if info.get("inverted") else "0",
         }
         if fmt == "pdf":
             headers["X-Aruco-Export-Dpi"] = str(info.get("export_dpi", dpi))
@@ -163,6 +191,25 @@ def create_app() -> Flask:
         )
         if not enc_ok:
             return jsonify(error="encode failed", index=index), 500
+        return Response(
+            buf.tobytes(),
+            mimetype="image/jpeg",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/api/cameras/<int:index>/frame/board-aruco")
+    def camera_frame_board_aruco(index: int):
+        ok, frame = read_single_frame(index)
+        if not ok or frame is None:
+            return jsonify(error="could not capture frame", index=index), 503
+        enc_ok, buf = cv2.imencode(
+            ".jpg",
+            frame,
+            [int(cv2.IMWRITE_JPEG_QUALITY), 100],
+        )
+        if not enc_ok:
+            return jsonify(error="encode failed", index=index), 500
+        warped, _corners = extract_board_aruco(frame)
         return Response(
             buf.tobytes(),
             mimetype="image/jpeg",

@@ -38,6 +38,7 @@ def read_single_frame(index: int, warmup_frames: int = 5) -> tuple[bool, np.ndar
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('M','J','P','G'))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
     if not cap.isOpened():
         return False, None
     try:
