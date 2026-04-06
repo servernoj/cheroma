@@ -20,8 +20,10 @@ from vision.board import (
     clear_stored_calibration,
     extract_board,
     find_board_corners,
+    fit_ideal_checkerboard_to_warp,
     get_stored_calibration,
     get_stored_calibration_record,
+    render_rotated_checkerboard_overlay,
     set_stored_calibration,
 )
 from vision.camera import probe_cameras, read_single_frame
@@ -291,7 +293,7 @@ def create_app() -> Flask:
         if cal_status != "ok" or cal_corners is None:
             return (
                 jsonify(
-                    error="board calibration unavailable",
+                    error="board calibration unavailable/invalid",
                     hint="POST /api/cameras/<index>/board/calibration first",
                 ),
                 422,
@@ -315,6 +317,178 @@ def create_app() -> Flask:
                 "Cache-Control": "no-store",
                 "X-Board-Warp-Source": "calibration",
             },
+        )
+
+    @app.get("/api/cameras/<int:index>/board/overlay")
+    def camera_board_overlay(index: int):
+        """
+        Same warp as ``/board``, then fit: **50% center crop** → square-like contours
+        → **cell** size → centered 8×8 grid, refined by **bounded differential evolution**
+        on ``(theta, dx, dy)`` (rotation ± ``wiggle_theta_deg``, translation ±
+        ``wiggle_trans_frac`` × cell) maximizing |Pearson| of 64 cell means vs ±1 checker.
+        Set ``stress_test=1`` to seed DE from **box corners** (bad starts) for
+        convergence testing; optional ``stress_corner_frac`` (default 0.92).
+
+        Winning **cell size (px)** is **``X-Board-Overlay-Cell``**; **which candidate**
+        is **``X-Board-Overlay-Cell-Candidate-Index``** (0-based, matches
+        ``candidate00`` … in debug GIF names). **``X-Board-Overlay-Cell-Candidates-Px``**
+        lists all tried sizes in order so index ↔ px is explicit.
+
+        When a fit exists, draws the overlay; ``min_ncc`` only affects
+        **X-Board-Overlay-Meets-Min-Ncc**. If the fit fails, returns the plain warp
+        (**X-Board-Overlay-Available: 0**).
+        """
+        try:
+            warmup = int(request.args.get("warmup", "0"))
+        except ValueError:
+            warmup = 0
+        try:
+            quality = int(request.args.get("quality", "85"))
+        except ValueError:
+            quality = 85
+        try:
+            out_size = int(request.args.get("size", "800"))
+        except ValueError:
+            out_size = 800
+        out_size = max(128, min(4096, out_size))
+        try:
+            min_ncc = float(request.args.get("min_ncc", "0.1"))
+        except ValueError:
+            min_ncc = 0.1
+        min_ncc = max(0.01, min(0.99, min_ncc))
+        try:
+            wiggle_theta_deg = float(request.args.get("wiggle_theta_deg", "10"))
+        except ValueError:
+            wiggle_theta_deg = 10.0
+        wiggle_theta_deg = max(0.0, min(45.0, wiggle_theta_deg))
+        try:
+            wiggle_trans_frac = float(request.args.get("wiggle_trans_frac", "0.25"))
+        except ValueError:
+            wiggle_trans_frac = 0.25
+        wiggle_trans_frac = max(0.0, min(0.5, wiggle_trans_frac))
+        try:
+            refine_maxiter = int(request.args.get("refine_maxiter", "30"))
+        except ValueError:
+            refine_maxiter = 30
+        refine_maxiter = max(5, min(120, refine_maxiter))
+        try:
+            refine_popsize = int(request.args.get("refine_popsize", "8"))
+        except ValueError:
+            refine_popsize = 8
+        refine_popsize = max(4, min(25, refine_popsize))
+        st_raw = (request.args.get("stress_test") or "0").strip().lower()
+        stress_test = st_raw in ("1", "true", "yes", "on")
+        try:
+            stress_corner_frac = float(request.args.get("stress_corner_frac", "0.92"))
+        except ValueError:
+            stress_corner_frac = 0.92
+        stress_corner_frac = max(0.5, min(0.999, stress_corner_frac))
+        try:
+            overlay_alpha = float(request.args.get("overlay_alpha", "0.5"))
+        except ValueError:
+            overlay_alpha = 0.5
+        overlay_alpha = max(0.05, min(0.95, overlay_alpha))
+
+        ok, frame = read_single_frame(index, warmup_frames=max(0, warmup))
+        if not ok or frame is None:
+            return jsonify(error="could not capture frame", index=index), 503
+
+        fh, fw = frame.shape[:2]
+        cal_corners, cal_status = get_stored_calibration(fw, fh)
+        if cal_status != "ok" or cal_corners is None:
+            return (
+                jsonify(
+                    error="board calibration unavailable/invalid",
+                    hint="POST /api/cameras/<index>/board/calibration first",
+                ),
+                422,
+            )
+
+        warped, _ = extract_board(frame, out_size=out_size, corners=cal_corners)
+        if warped is None:
+            return jsonify(error="warp failed", index=index), 500
+
+        fit = fit_ideal_checkerboard_to_warp(
+            warped,
+            max_theta_deg=wiggle_theta_deg,
+            max_trans_frac=wiggle_trans_frac,
+            refine_maxiter=refine_maxiter,
+            refine_popsize=refine_popsize,
+            stress_test=stress_test,
+            stress_corner_frac=stress_corner_frac,
+        )
+
+        if fit is not None:
+            out_img = render_rotated_checkerboard_overlay(
+                warped,
+                fit["cell"],
+                fit["ox"],
+                fit["oy"],
+                fit["theta_deg"],
+                fit["dx"],
+                fit["dy"],
+                alpha=overlay_alpha,
+            )
+            ncc_abs = float(fit.get("ncc_abs", abs(fit["ncc"])))
+            meets = "1" if ncc_abs >= min_ncc else "0"
+            overlay_headers = {
+                "X-Board-Overlay-Available": "1",
+                "X-Board-Overlay-Meets-Min-Ncc": meets,
+                "X-Board-Overlay-Ncc": f"{fit['ncc']:.4f}",
+                "X-Board-Overlay-Ncc-Abs": f"{ncc_abs:.4f}",
+                "X-Board-Overlay-Cell": f"{fit['cell']:.3f}",
+                "X-Board-Overlay-Ox": f"{fit['ox']:.3f}",
+                "X-Board-Overlay-Oy": f"{fit['oy']:.3f}",
+                "X-Board-Overlay-Theta-Deg": f"{fit['theta_deg']:.4f}",
+                "X-Board-Overlay-Dx": f"{fit['dx']:.4f}",
+                "X-Board-Overlay-Dy": f"{fit['dy']:.4f}",
+                "X-Board-Overlay-Evaluated-Steps": str(fit["evaluated_steps"]),
+                "X-Board-Overlay-Refine-Method": str(fit.get("refine_method", "")),
+                "X-Board-Overlay-Refine-Maxiter": str(fit.get("refine_maxiter", "")),
+                "X-Board-Overlay-Refine-Popsize": str(fit.get("refine_popsize", "")),
+                "X-Board-Overlay-Square-Candidates": str(fit["square_candidates"]),
+                "X-Board-Overlay-Contours-Seen": str(fit["contours_seen"]),
+                "X-Board-Overlay-Cell-Sizes-Tried": str(fit["cell_sizes_tried"]),
+                "X-Board-Overlay-Cell-Candidate-Index": str(fit.get("cell_candidate_index", "")),
+                "X-Board-Overlay-Cell-Candidates-Px": ",".join(
+                    f"{float(x):.6f}" for x in (fit.get("cell_size_candidates_px") or [])
+                ),
+                "X-Board-Overlay-Stress-Test": "1" if fit.get("stress_test") else "0",
+                "X-Board-Overlay-Stress-Corner-Frac": (
+                    f"{fit['stress_corner_frac']:.4f}"
+                    if fit.get("stress_corner_frac") is not None
+                    else ""
+                ),
+            }
+            dbg = fit.get("debug_fit_animations") or []
+            if dbg:
+                overlay_headers["X-Board-Overlay-Debug-Animation-Count"] = str(len(dbg))
+                joined = "|".join(dbg)
+                if len(joined) <= 1800:
+                    overlay_headers["X-Board-Overlay-Debug-Animation-Paths"] = joined
+        else:
+            out_img = warped
+            overlay_headers = {
+                "X-Board-Overlay-Available": "0",
+                "X-Board-Overlay-Meets-Min-Ncc": "0",
+            }
+
+        enc_ok, buf = cv2.imencode(
+            ".jpg",
+            out_img,
+            [int(cv2.IMWRITE_JPEG_QUALITY), min(100, max(1, quality))],
+        )
+        if not enc_ok:
+            return jsonify(error="encode failed", index=index), 500
+        headers = {
+            "Cache-Control": "no-store",
+            "X-Board-Warp-Source": "calibration",
+            **overlay_headers,
+        }
+        return Response(
+            buf.tobytes(),
+            mimetype="image/jpeg",
+            headers=headers,
         )
 
     @app.post("/api/reset")

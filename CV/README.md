@@ -45,7 +45,7 @@ By default the app listens on **127.0.0.1** port **5050**. Override with environ
 | `VISION_PORT`  | `5050`    | Port               |
 | `FLASK_DEBUG`  | `1`       | Set to `0` to disable Flask debug mode |
 | `VISION_CAMERA_INDEX` | `0` | OpenCV camera index (see Webcam section) |
-| `VISION_BOARD_DEBUG_DIR` | *(empty)* | If set, edge-based `find_board_corners` writes `overlay.png` there (contours + chosen quad). |
+| `VISION_BOARD_DEBUG_DIR` | *(empty)* | If set: `find_board_corners` writes `overlay.png` there; overlay fit also writes per-candidate GIFs plus `overlay_fit_*_API_WINNER.gif`. Requires `imageio`. |
 | `VISION_BOARD_CALIBRATION_FILE` | `CV/board_calibration.json` | Single global board quad (full-frame corners + frame size). |
 
 Example:
@@ -93,6 +93,8 @@ Expected JSON: `{"status":"ok"}`
 
 - **`GET /api/cameras/<index>/board`** — Warped **JPEG** using **saved calibration** only (no live edge detection). Query: **`warmup`**, **`quality`**, **`size`**. Returns **422** if calibration is missing or frame size does not match (recalibrate after resolution change).
 
+- **`GET /api/cameras/<index>/board/overlay`** — Same warp and calibration gates as **`/board`**, then **first-pass** fit: symmetric scale from full-frame `cell = size/8` down to **`min_scale`×(size/8)`**. The winning scale maximizes **Pearson correlation** between **64 per-cell mean luminances** and a ±1 checker. **`n_steps`** (default **48**, clamped 8–256) is how many **`cell`** samples are placed on that range (inclusive endpoints). Headers **`X-Board-Overlay-Grid-Steps`**, **`X-Board-Overlay-Evaluated-Steps`**, **`X-Board-Overlay-Cell-Range`** report configured vs actually scored steps and `cell` endpoints. Default **`min_scale=0.75`** sweeps a **25%** shrink in `cell`; for a ~**5%** rim try **`min_scale`** closer to **1** (e.g. **`0.95`**). Query **`force_step`** (1-based index into the sweep) draws that step’s grid instead of the best score (preview). Query **`min_ncc`** only sets **`X-Board-Overlay-Meets-Min-Ncc`**. Also: **`warmup`**, **`quality`**, **`size`**, **`overlay_alpha`**.
+
 - **`GET /api/cameras/<index>/board/calibration`** — Same JSON as a successful **POST** and the on-disk file: `ok`, and when calibrated `frame_width`, `frame_height`, `corners` (4×2). Returns `{"ok": false}` when none or invalid file. No capture. Calibration is global; the path index is not persisted.
 
 - **`POST /api/cameras/<index>/board/calibration`** — Capture one frame from that index, run edge detection, **replace** stored calibration with one quad. OpenCV index is only used to open the device; it is not persisted. Returns **422** if no quad found.
@@ -109,6 +111,8 @@ curl -s -o /tmp/cam0.jpg "http://127.0.0.1:5050/api/cameras/0"
 curl -s http://127.0.0.1:5050/api/cameras/0/board/calibration | python3 -m json.tool
 curl -s -X POST "http://127.0.0.1:5050/api/cameras/0/board/calibration"
 curl -s -o /tmp/board.jpg "http://127.0.0.1:5050/api/cameras/0/board?size=800"
+curl -s -o /tmp/board_overlay.jpg "http://127.0.0.1:5050/api/cameras/0/board/overlay?size=800"
+curl -s -o /tmp/board_overlay_s10.jpg "http://127.0.0.1:5050/api/cameras/0/board/overlay?size=800&force_step=10"
 ```
 
 ## API stubs (to be implemented)

@@ -1,3 +1,15 @@
+# CheRoMa -- Chess Robotic Manipulator
+
+This project represents work files to build and program a 4-DOF robotic manipulator intended to move chess pieces on the board by following live game broadcasted from chess.com (and lichess.org in near future) platforms. The arm is built from budgetary parts (servos, electromagnet, brackets) readily available for purchase from Amazon and other retailers. It also has a number of custom made 3D printed parts with CAD designs included in this repo.
+
+As of April'26 this is a "work in progress" with completion rate of roughly 70-80%. The biggest challenge so far is the lack of precision of budgetary servos that negatively affects positioning of the arm in 3D space (error ±10mm) , which in turn results in inability for the arm to move specific chess piece from/to target position. This problem is being addressed by introducing a Digitizer -- platform allowing to calibrate robot's model params in real time by forcing it to move to specific positions and automatically reading 3D coordinates of the arrival point and using this data to fit model coefficients. 
+
+## Demos
+
+- Cheroma arm moving chess pieces https://www.youtube.com/shorts/CEkricqCiFo
+- Cheroma Digitizer prototype is used for arm calibration https://www.youtube.com/shorts/9hFcoPiPavI
+
+
 # Install the service
 
 ## Install NVM + Node + PNPM
