@@ -50,62 +50,50 @@ const setCurrentPosition = (position) => {
 }
 
 /**
- * @param {number} angle
- * @param {ServoCalPoint} begin
- * @param {ServoCalPoint} end
- * @returns {number}
- */
-const interp = (angle, begin, end) => {
-  const [a0, u0] = begin
-  const [a1, u1] = end
-  if (a1 === a0) throw new Error('Duplicate angleDeg in sortedPoints')
-  const t = (angle - a0) / (a1 - a0)
-  return u0 + t * (u1 - u0)
-}
-
-/**
- * @param {number} angleDeg
- * @param {{
- *   sortedPoints: Array<ServoCalPoint>
- *   fitting: ServoFitting
- *   clamp?: boolean
- * }} options
- */
-const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, fitting, clamp = true }) => {
-  if (!Array.isArray(sortedPoints) || sortedPoints.length < 2) {
-    throw new Error('sortedPoints must have at least 2 [angleDeg, pulseUs] points')
-  }
-  angleDeg = (angleDeg - fitting.offset) / fitting.scale
-  const n = sortedPoints.length
-  if (angleDeg <= sortedPoints[0][0]) {
-    if (clamp) {
-      return sortedPoints[0][1]
-    }
-    return interp(angleDeg, sortedPoints[0], sortedPoints[1])
-  }
-  if (angleDeg >= sortedPoints[n - 1][0]) {
-    if (clamp) {
-      return sortedPoints[n - 1][1]
-    }
-    return interp(angleDeg, sortedPoints[n - 2], sortedPoints[n - 1])
-  }
-  let lo = 0
-  let hi = n - 1
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1
-    if (sortedPoints[mid][0] <= angleDeg) {
-      lo = mid
-    }
-    else hi = mid
-  }
-  return interp(angleDeg, sortedPoints[lo], sortedPoints[lo + 1])
-}
-
-/**
  * @param {ServoData} servos
  * @param {{ clamp?: boolean }} [options]
  */
 const buildAngleDegToPulseUs = (servos, { clamp = true } = {}) => {
+  const interp = (angle, begin, end) => {
+    const [a0, u0] = begin
+    const [a1, u1] = end
+    if (a1 === a0) throw new Error('Duplicate angleDeg in sortedPoints')
+    const t = (angle - a0) / (a1 - a0)
+    // IMPORTANT: keep as float microseconds here.
+    // Rounding too early causes "stair-step" motion when angle increments are small.
+    return u0 + t * (u1 - u0)
+  }
+
+  const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, fitting, clamp: clampAngle = true }) => {
+    if (!Array.isArray(sortedPoints) || sortedPoints.length < 2) {
+      throw new Error('sortedPoints must have at least 2 [angleDeg, pulseUs] points')
+    }
+    angleDeg = (angleDeg - fitting.offset) / fitting.scale
+    const n = sortedPoints.length
+    if (angleDeg <= sortedPoints[0][0]) {
+      if (clampAngle) {
+        return sortedPoints[0][1]
+      }
+      return interp(angleDeg, sortedPoints[0], sortedPoints[1])
+    }
+    if (angleDeg >= sortedPoints[n - 1][0]) {
+      if (clampAngle) {
+        return sortedPoints[n - 1][1]
+      }
+      return interp(angleDeg, sortedPoints[n - 2], sortedPoints[n - 1])
+    }
+    let lo = 0
+    let hi = n - 1
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1
+      if (sortedPoints[mid][0] <= angleDeg) {
+        lo = mid
+      }
+      else hi = mid
+    }
+    return interp(angleDeg, sortedPoints[lo], sortedPoints[lo + 1])
+  }
+
   const perServo = Object.entries(servos).reduce(
     (acc, [servoName, { calPoints, fitting }]) => {
       const sortedPoints = calPoints.slice().sort(
@@ -210,18 +198,6 @@ const doRelax = async () => {
 }
 
 /**
- * Quintic ease-in-out: zero velocity + zero accel at endpoints.
- * @param {number} t in [0,1]
- */
-const easeQuintic = (t) => {
-  const t2 = t * t
-  const t3 = t2 * t
-  const t4 = t3 * t
-  const t5 = t4 * t
-  return 10 * t3 - 15 * t4 + 6 * t5
-}
-
-/**
  * @param {ServoPosition} from
  * @param {ServoPosition} to
  * @param {{
@@ -241,6 +217,15 @@ const pathPlanner = (from, to, options) => {
   if (dtMs <= 0) throw new Error('dtMs must be > 0')
   if (vMaxDegPerSec <= 0) throw new Error('vMaxDegPerSec must be > 0')
   if (easing !== 'quintic') throw new Error(`Unsupported easing: ${easing}`)
+
+  /** Quintic ease-in-out: zero velocity + zero accel at endpoints. @param {number} t in [0,1] */
+  const easeQuintic = (t) => {
+    const t2 = t * t
+    const t3 = t2 * t
+    const t4 = t3 * t
+    const t5 = t4 * t
+    return 10 * t3 - 15 * t4 + 6 * t5
+  }
 
   const dtSec = dtMs / 1000
   const servoNames = Object.keys(runtime.servos)
@@ -281,7 +266,7 @@ const pathPlanner = (from, to, options) => {
  * @param {Array<{ point: ServoPosition, setChannelsData: Array<SetChannel> }>} steps
  * @param {number} stepMs
  */
-const executeTimedMotionSteps = async (steps, stepMs,) => {
+const executeTimedMotionSteps = async (steps, stepMs) => {
   let nextTick = performance.now() + stepMs
   for (const { point, setChannelsData } of steps) {
     await setChannels(setChannelsData)
