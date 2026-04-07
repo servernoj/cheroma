@@ -113,7 +113,7 @@ const move = async (args, options) => {
   const {
     elevation = 100,
   } = options ?? {}
-  const height = pieces[args.piece].height
+  const height = pieces?.[args.piece.toLowerCase()]?.height ?? 100
   const from = notationToPosition(args.from)
   const to = args.to === 'basket'
     ? board.basket

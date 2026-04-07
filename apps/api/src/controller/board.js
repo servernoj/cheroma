@@ -50,7 +50,7 @@ router.post(
     body: z.object({
       from: z.string(),
       to: z.string(),
-      piece: z.enum(board.pieces)
+      piece: z.enum(['p', 'b', 'n', 'r', 'k', 'q'])
     })
   }),
   async (req, res) => {
