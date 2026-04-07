@@ -7,6 +7,7 @@ import board from '@/controller/board.js'
 import digitizer from '@/controller/digitizer.js'
 import calibration from '@/controller/calibration.js'
 import live from '@/controller/live.js'
+import config from '@/controller/config.js'
 import { init as pca9685Init } from '@/modules/drivers/PCA9685.js'
 import { init as digitizerInit } from '@/modules/drivers/digitizer.js'
 import * as gpio from '@/modules/drivers/gpio.js'
@@ -26,6 +27,7 @@ export default async (worker) => {
   app.use('/digitizer', digitizer)
   app.use('/calibration', calibration)
   app.use('/live', live)
+  app.use('/config', config)
 
   app.use(fallback)
   app.use(errorHandler)

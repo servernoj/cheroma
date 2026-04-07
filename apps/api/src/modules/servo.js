@@ -1,31 +1,22 @@
 import { writeRegister } from './i2c.js'
 import { sleep } from './utils.js'
 import { IK, toModel, K2S } from '@/modules/kinematics.js'
-import config from '@/config.json' with {type: 'json'}
 import * as PCA9685 from '@/modules/drivers/PCA9685.js'
 import { performance } from 'node:perf_hooks'
+import { subscribe } from '@/modules/config.js'
 
-// Servo names as array
-/** @type {Array<ServoName>} */
-// @ts-ignore
-const servoNames = Object.keys(config.servos)
-
-/**
- * @param {'home' | 'init'} positionName
- * @returns {ServoPosition}
- */
-const getPosition = (positionName) => Object.entries(config.servos).reduce(
-  /** * @param {*} acc */
-  (acc, [servoName, servo]) => {
-    return {
-      ...acc,
-      [servoName]: servo[positionName]
-    }
-  },
-  {}
-)
-
-let currentPosition = getPosition('init')
+/** @type {ServoData} */
+let servos
+/** @type {number} */
+let dtMs
+/** @type {boolean} */
+let isDebug
+/** @type {(arg: 'home' | 'init') => ServoPosition} */
+let getPosition
+/** @type {ServoPosition} */
+let currentPosition
+/** @type {(arg: { angleDeg, servoName }) => number} */
+let angleDegToPulseUs
 
 /**
  * Set internal current position (e.g. after commanding angles outside toPoint/line).
@@ -92,7 +83,7 @@ const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, fitting, clamp = true })
 }
 
 const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
-  const closure = Object.entries(config.servos).reduce(
+  const closure = Object.entries(servos).reduce(
     (acc, [servoName, { calPoints, fitting }]) => {
       const sortedPoints = calPoints.slice().sort(
         (a, b) => a[0] - b[0]
@@ -117,7 +108,26 @@ const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
   return handler
 }
 
-const angleDegToPulseUs = angleDegToPulseUsFactory({ clamp: false })
+subscribe(config => {
+  servos = config.servos
+  dtMs = config.drivers.pca9685.dtMs
+  isDebug = config.options.debug
+  angleDegToPulseUs = angleDegToPulseUsFactory({ clamp: false })
+
+}, { immediate: true })
+
+getPosition = (positionName) => Object.entries(servos).reduce(
+  /** * @param {*} acc */
+  (acc, [servoName, servo]) => {
+    return {
+      ...acc,
+      [servoName]: servo[positionName]
+    }
+  },
+  {}
+)
+currentPosition = getPosition('init')
+
 
 /**
  * @param {ServoPosition} position joint angles in deg (keys = servo names)
@@ -126,7 +136,7 @@ const angleDegToPulseUs = angleDegToPulseUsFactory({ clamp: false })
 const positionToSetChannelsData = (position) => Object.entries(position).map(
   /** @param {*} arg*/
   ([servoName, angleDeg]) => ({
-    channel: config.servos[servoName].channel,
+    channel: servos[servoName].channel,
     pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
   })
 )
@@ -139,20 +149,20 @@ const setChannel = async ({ channel, pulseWidthUs }) => {
     0,
     Math.min(
       4095,
-      Math.round(pulseWidthUs * PCA9685.freq * 4096 / 1e6)
+      Math.round(pulseWidthUs * PCA9685.getFreq() * 4096 / 1e6)
     )
   )
   if (offTicks === 0) {
-    await writeRegister(PCA9685.REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, 0x00, 0x10]), PCA9685.deviceAddr)
+    await writeRegister(PCA9685.REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, 0x00, 0x10]), PCA9685.getDeviceAddr())
     return
   }
   if (offTicks >= 4095) {
-    await writeRegister(PCA9685.REGS.BASE + 4 * channel, Buffer.from([0x00, 0x10, 0x00, 0x00]), PCA9685.deviceAddr)
+    await writeRegister(PCA9685.REGS.BASE + 4 * channel, Buffer.from([0x00, 0x10, 0x00, 0x00]), PCA9685.getDeviceAddr())
     return
   }
   const off = Buffer.alloc(2)
   off.writeUInt16LE(offTicks)
-  await writeRegister(PCA9685.REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, ...off]), PCA9685.deviceAddr)
+  await writeRegister(PCA9685.REGS.BASE + 4 * channel, Buffer.from([0x00, 0x00, ...off]), PCA9685.getDeviceAddr())
 }
 
 /**
@@ -176,7 +186,7 @@ const setChannels = async (channels) => {
           0,
           Math.min(
             4095,
-            Math.round(pulseWidthUs * PCA9685.freq * 4096 / 1e6)
+            Math.round(pulseWidthUs * PCA9685.getFreq() * 4096 / 1e6)
           )
         )
         off.writeUInt16LE(offTicks)
@@ -186,18 +196,14 @@ const setChannels = async (channels) => {
     },
     Buffer.from([])
   )
-  await writeRegister(PCA9685.REGS.BASE + 4 * sortedChannels[0].channel, writeData, PCA9685.deviceAddr)
+  await writeRegister(PCA9685.REGS.BASE + 4 * sortedChannels[0].channel, writeData, PCA9685.getDeviceAddr())
 }
 
-/**
- * @param {null | undefined | Array<string>} servos 
- */
-const doRelax = async (servos = null) => {
-  servos = servos ?? Object.keys(config.servos)
+const doRelax = async () => {
   await Promise.all(
-    servos.map(
+    Object.keys(servos).map(
       async servoName => {
-        const { channel } = config.servos[servoName]
+        const { channel } = servos[servoName]
         await setChannel({ channel, pulseWidthUs: 0 })
       }
     )
@@ -246,7 +252,7 @@ const pathPlanner = (from, to, options) => {
   const dtSec = dtMs / 1000
 
   // Determine maximum joint swing in degrees.
-  const maxDeltaDeg = servoNames.reduce(
+  const maxDeltaDeg = Object.keys(servos).reduce(
     (acc, servoName) => {
       const d = Math.abs(to[servoName] - from[servoName])
       return d > acc ? d : acc
@@ -264,7 +270,7 @@ const pathPlanner = (from, to, options) => {
     (_, idx) => {
       const tau = idx / (N - 1)
       const s = easeQuintic(tau)
-      return servoNames.reduce(
+      return Object.keys(servos).reduce(
         /** @param {*} acc */
         (acc, servoName) => {
           const start = from[servoName]
@@ -294,7 +300,6 @@ const toPoint = async (toPosition, via = [], options) => {
     relax = true,
     vMaxDegPerSec = 60,
   } = options ?? {}
-  const dtMs = config.drivers.pca9685.dtMs
   const { points } = [...via, toPosition].reduce(
     (acc, next, idx) => {
       const segmentPoints = pathPlanner(
@@ -351,8 +356,8 @@ const line = async (start, delta, options) => {
   const {
     maxSpeed = 100
   } = options ?? {}
-  const dtMs = config.drivers.pca9685.dtMs * 2
-  const dtSec = dtMs / 1000
+  const _dtMs = dtMs * 2
+  const dtSec = _dtMs / 1000
   const maxDistance = Math.max(...Object.values(delta).map(Math.abs))
   const T = Math.round(maxDistance / maxSpeed)
   const N = Math.max(2, Math.ceil(T / dtSec) + 1)
@@ -370,7 +375,7 @@ const line = async (start, delta, options) => {
       }
     }
   )
-  let nextTick = performance.now() + dtMs
+  let nextTick = performance.now() + _dtMs
   let slackCounter = 0
   for (const { point, setChannelsData } of points) {
     await setChannels(setChannelsData)
@@ -379,13 +384,13 @@ const line = async (start, delta, options) => {
     const slack = nextTick - now
     if (slack > 0) {
       await sleep(slack)
-      nextTick += dtMs
+      nextTick += _dtMs
       slackCounter++
     } else {
-      nextTick = now + dtMs
+      nextTick = now + _dtMs
     }
   }
-  if (config.options.debug) {
+  if (isDebug) {
     // The higher the number reported the better. Ideally 100% means that every step has a slack to sleep for. 
     console.log(`Slacked motion ratio: ${Math.round(slackCounter / points.length * 100)}%`)
   }

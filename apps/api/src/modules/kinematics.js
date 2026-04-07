@@ -1,22 +1,29 @@
-import config from '@/config.json' with {type: 'json'}
 import { Matrix } from 'ml-matrix'
 import { cosd, sind, rotationMatrix, d2r, r2d } from '@/modules/utils.js'
+import { subscribe } from '@/modules/config.js'
 
+let geom
+let fitting
+let k2s
 
-const k2s = Object.entries(config.servos).reduce(
-  (acc, [servoName, { kinematics }]) => {
-    acc[kinematics] = servoName
-    return acc
-  },
-  {}
-)
+subscribe(config => {
+  geom = config.geom
+  fitting = config.fitting
+  k2s = Object.entries(config.servos).reduce(
+    (acc, [servoName, { kinematics }]) => {
+      acc[kinematics] = servoName
+      return acc
+    },
+    {}
+  )
+}, { immediate: true })
 
 /**
  * @param {KinematicsOutput} P 
  * @returns {KinematicsOutput}
  */
 const toModel = P => {
-  const { roll, pitch, yaw, t } = config.fitting
+  const { roll, pitch, yaw, t } = fitting
   const R = rotationMatrix(roll, pitch, yaw)
   const pVec = Matrix.columnVector([P.x, P.y, P.z])
   const tVec = Matrix.columnVector(t)
@@ -47,7 +54,7 @@ const K2S = K => Object.entries(K).reduce(
  * @returns {{p: Raw3D}}
  */
 const FK_ = ({ q0, q1, q2, q3 }, gamma) => {
-  const { L1, L2, L3, H, dX } = config.geom
+  const { L1, L2, L3, H, dX } = geom
   gamma = gamma ?? q1 + q2 + q3
   const r = (
     dX * cosd(q1) +
@@ -95,7 +102,7 @@ const IK = ({ x, y, z }, options) => {
     tunning = false,
     gamma = 180
   } = options ?? {}
-  const { L1, L2, L3, H, dX } = config.geom
+  const { L1, L2, L3, H, dX } = geom
   const q0 = Math.atan2(y, x)
   const r = Math.hypot(x, y)
   const rw = r - L3 * sind(gamma)

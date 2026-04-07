@@ -50,9 +50,9 @@ declare global {
   type Board = {
     originOffset: KinematicsOutput,
     cellSize: number
-    gripperChannel: number
-    open: number
-    close: number
+    grabberChannel: number
+    grab: number
+    release: number
     basket: KinematicsOutput
   }
   type Pieces = {

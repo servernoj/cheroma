@@ -1,21 +1,30 @@
 import * as servo from '@/modules/servo.js'
 import { IKK } from '@/modules/kinematics.js'
-import config from '@/config.json' with {type: 'json'}
+import { subscribe } from '@/modules/config.js'
 import { sleep } from './utils.js'
 
-const pieces = Object.keys(config.pieces)
+/** @type {Pieces} */
+let pieces
+/** @type {Board} */
+let board
+
+subscribe(config => {
+  pieces = config.pieces
+  board = config.board
+}, { immediate: true })
+
 
 const release = async () => {
   await servo.setChannel({
-    channel: config.board.grabberChannel,
-    pulseWidthUs: config.board.release
+    channel: board.grabberChannel,
+    pulseWidthUs: board.release
   })
 }
 
 const grab = async () => {
   await servo.setChannel({
-    channel: config.board.grabberChannel,
-    pulseWidthUs: config.board.grab
+    channel: board.grabberChannel,
+    pulseWidthUs: board.grab
   })
 }
 
@@ -104,10 +113,10 @@ const move = async (args, options) => {
   const {
     elevation = 100,
   } = options ?? {}
-  const height = config.pieces[args.piece].height
+  const height = pieces[args.piece].height
   const from = notationToPosition(args.from)
   const to = args.to === 'basket'
-    ? config.board.basket
+    ? board.basket
     : notationToPosition(args.to)
   Object.assign(from, {
     z: from.z + height
@@ -146,16 +155,10 @@ const remove = async (args, options) => {
 /**
  * Takes chess board notation, e.g. `c3` and returns `{x,y,z}` of the cell center at board height
  * @param {string} notation
- * @param {{
- *   correction?: boolean
- * }} [options]
  * @returns {KinematicsOutput}
  */
-const notationToPosition = (notation, options) => {
-  const {
-    correction = false
-  } = options ?? {}
-  const { originOffset, cellSize } = config.board
+const notationToPosition = (notation) => {
+  const { originOffset, cellSize } = board
   if (
     typeof notation !== 'string' ||
     notation.length !== 2
@@ -169,12 +172,8 @@ const notationToPosition = (notation, options) => {
   // correction to address non-square shapes of cells in 4th rank
   const fileIdx = file.charCodeAt(0) - 'a'.charCodeAt(0)
   const rankNum = Number(rank)
-  const deficit = 2 - fileIdx * 1 / 7
-  const xCorrection = correction && rankNum > 3
-    ? -deficit * (rankNum > 4 ? 1 : 0.5)
-    : 0
   // --
-  const x = Math.round(originOffset.x + (rankNum - 1) * cellSize + cellSize * 0.5 + xCorrection)
+  const x = Math.round(originOffset.x + (rankNum - 1) * cellSize + cellSize * 0.5)
   const y = Math.round(originOffset.y - fileIdx * cellSize - cellSize * 0.5)
   const z = originOffset.z
   return { x, y, z }

@@ -1,9 +1,19 @@
 import { writeRegister } from '@/modules/i2c.js'
-import config from '@/config.json' with { type: 'json' }
+import { subscribe } from '@/modules/config.js'
 
-const { address: deviceAddr, freq: desiredFreq } = config.drivers.pca9685
-const prescale = Math.round(25e6 / (4096 * desiredFreq)) - 1
-const freq = 25e6 / (4096 * (prescale + 1))
+let deviceAddr
+let freq
+let prescale
+
+subscribe(config => {
+  const desiredFreq = config.drivers.pca9685.freq
+  prescale = Math.round(25e6 / (4096 * desiredFreq)) - 1
+  freq = 25e6 / (4096 * (prescale + 1))
+  deviceAddr = config.drivers.pca9685.address
+}, { immediate: true })
+
+const getFreq = () => freq
+const getDeviceAddr = () => deviceAddr
 
 const REGS = {
   MODE1: 0x00,
@@ -22,4 +32,4 @@ const init = async () => {
   await writeRegister(REGS.MODE2, Buffer.from([0x06]), deviceAddr)
 }
 
-export { init, freq, REGS, deviceAddr }
+export { init, getFreq, REGS, getDeviceAddr }

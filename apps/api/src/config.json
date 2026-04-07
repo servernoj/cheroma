@@ -13,7 +13,6 @@
       "intPin": 27
     },
     "digitizer": {
-      "elevation": 50,
       "mcp23017": [
         {
           "address": 32,

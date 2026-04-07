@@ -3,12 +3,16 @@
  * open-drain, active low): sets flag on falling edge, clears flag on rising edge.
  */
 import { Gpio } from '@/gpio-stub.js'
-import config from '@/config.json' with { type: 'json' }
+import { subscribe } from '@/modules/config.js'
 
-const intPin = config.drivers?.gpio?.intPin
-if (intPin == null || typeof intPin !== 'number') {
-  throw new Error('config.drivers.gpio.intPin is required and must be a number')
-}
+let intPin
+
+subscribe(config => {
+  intPin = config.drivers?.gpio?.intPin
+  if (intPin == null || typeof intPin !== 'number') {
+    throw new Error('config.drivers.gpio.intPin is required and must be a number')
+  }
+}, { immediate: true })
 
 let gpio = null
 let interruptFlag = false

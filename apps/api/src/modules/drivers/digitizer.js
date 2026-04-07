@@ -1,16 +1,21 @@
 import { writeRegister, readRegister } from '@/modules/i2c.js'
-import config from '@/config.json' with { type: 'json' }
+import { subscribe } from '@/modules/config.js'
 import { keyBy, map } from 'lodash-es'
 
-const addresses = config?.drivers?.digitizer?.mcp23017?.map(({ address }) => address) ?? []
+let addresses = []
+let unitByAddress = {}
+let targets = []
 
-if (addresses.length === 0) {
-  throw new Error('config.drivers.digitizer.mcp23017 must be a non-empty array')
-}
+subscribe((config) => {
+  const units = config?.drivers?.digitizer?.mcp23017 ?? []
+  if (units.length === 0) {
+    throw new Error('config.drivers.digitizer.mcp23017 must be a non-empty array')
+  }
 
-const unitByAddress = keyBy(config.drivers.digitizer.mcp23017, ({ address }) => `0x${address.toString(16)}`)
-
-const targets = [...new Set(map(config.drivers.digitizer.mcp23017, 'target'))]
+  addresses = units.map(({ address }) => address)
+  unitByAddress = keyBy(units, ({ address }) => `0x${address.toString(16)}`)
+  targets = [...new Set(map(units, 'target'))]
+}, { immediate: true })
 
 const R = {
   IODIR: 0x00,

@@ -2,9 +2,16 @@
  * TCP calibration: rigid registration + linear joint correction (no geometry fit, no box bounds).
  * Kinematic closure: q3 = gamma - q1_act - q2_act (gamma default 180°).
  */
-import config from '../config.json' with { type: 'json' }
 import { Matrix, solve } from 'ml-matrix'
 import { cosd, sind, rotationMatrix, roundFactory } from './utils.js'
+import { subscribe } from '@/modules/config.js'
+
+/** @type {GeomData} */
+let geom
+
+subscribe(config => {
+  geom = config.geom
+}, { immediate: true })
 
 /**
  * Forward kinematics Q -> [x,y,z]
@@ -12,10 +19,9 @@ import { cosd, sind, rotationMatrix, roundFactory } from './utils.js'
  * @param {number} q1
  * @param {number} q2
  * @param {number} q3
- * @param {{ H: number, L1: number, L2: number, L3: number, dX: number }} geom
  * @returns {[number, number, number]}
  */
-export function FK(q0, q1, q2, q3, geom) {
+export function FK(q0, q1, q2, q3) {
   const Gamma = q1 + q2 + q3
   const rr =
     geom.dX * cosd(q1) +
@@ -90,7 +96,6 @@ function residualStats(r) {
 export function fitXyzFromMeasurements(input) {
   const { Qcmd, Xmeas, init } = input
   const gammaDeg = 180
-  const geom = config.geom
 
   if (!Array.isArray(Qcmd) || !Array.isArray(Xmeas)) {
     throw new Error('Qcmd and Xmeas must be arrays')
@@ -136,7 +141,7 @@ export function fitXyzFromMeasurements(input) {
       const q2 = a[2] * Qcmd[i][2] + b[2]
       const q3 = gammaDeg - q1 - q2
       const raw = Matrix.columnVector(
-        FK(q0, q1, q2, q3, geom)
+        FK(q0, q1, q2, q3)
       )
       const pred = R.mmul(raw).add(t)
       const meas = Matrix.columnVector(Xmeas[i])

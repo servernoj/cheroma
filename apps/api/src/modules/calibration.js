@@ -3,7 +3,7 @@
  * Flow per point: move to pre-target (Z + elevationMm), vertical descent until digitizer
  * touch, record commanded angles and measured XYZ, clear interrupt, return to home.
  */
-import config from '@/config.json' with { type: 'json' }
+import { subscribe } from '@/modules/config.js'
 import { IKK } from '@/modules/kinematics.js'
 import * as servo from '@/modules/servo.js'
 import * as gpio from '@/modules/drivers/gpio.js'
@@ -11,14 +11,20 @@ import * as digitizer from '@/modules/digitizer.js'
 import { median, sleep } from '@/modules/utils.js'
 import { performance } from 'node:perf_hooks'
 
+let dtMs = Infinity
 /**
  * @type {{[k in keyof KinematicsInput]: ServoName}}
  */
-const servoNameByKinematics = Object.entries(config.servos).reduce(
-  /** @param {*} acc */
-  (acc, [servoName, { kinematics }]) => ({ ...acc, [kinematics]: servoName }),
-  {}
-)
+let servoNameByKinematics
+
+subscribe(config => {
+  dtMs = config.drivers.pca9685.dtMs
+  servoNameByKinematics = Object.entries(config.servos).reduce(
+    /** @param {*} acc */
+    (acc, [servoName, { kinematics }]) => ({ ...acc, [kinematics]: servoName }),
+    {}
+  )
+}, { immediate: true })
 
 /**
  * Build trajectory points for vertical descent from (x,y,zTop) to (x,y,zBottom).
@@ -30,11 +36,11 @@ const servoNameByKinematics = Object.entries(config.servos).reduce(
  * @returns {Array<{ xyz: KinematicsOutput, angles: ServoPosition }>}
  */
 const buildVerticalDescentTrajectory = (x, y, zTop, zBottom, options = {}) => {
-  const dtMs = config.drivers.pca9685.dtMs
+  const _dtMs = dtMs * 10
   const maxSpeedMmPerSec = options.maxSpeedMmPerSec ?? 50
   const deltaZ = zBottom - zTop
   const maxDistance = Math.abs(deltaZ)
-  const dtSec = dtMs / 1000
+  const dtSec = _dtMs / 1000
   const T = maxDistance / maxSpeedMmPerSec
   const N = Math.max(2, Math.ceil(T / dtSec) + 1)
   const denom = N - 1
@@ -54,8 +60,8 @@ const buildVerticalDescentTrajectory = (x, y, zTop, zBottom, options = {}) => {
  * @returns {Promise<{ index: number, xyz: KinematicsOutput, angles: ServoPosition } | null>} point at touch, or null if no interrupt
  */
 const runInterruptibleDescent = async (points) => {
-  const dtMs = config.drivers.pca9685.dtMs * 10
-  let nextTick = performance.now() + dtMs
+  const _dtMs = dtMs * 10
+  let nextTick = performance.now() + _dtMs
   for (let i = 0; i < points.length; i++) {
     const { angles } = points[i]
     await servo.setChannels(servo.positionToSetChannelsData(angles))
@@ -64,9 +70,9 @@ const runInterruptibleDescent = async (points) => {
     const slack = nextTick - now
     if (slack > 0) {
       await sleep(slack)
-      nextTick += dtMs
+      nextTick += _dtMs
     } else {
-      nextTick = now + dtMs
+      nextTick = now + _dtMs
     }
     if (gpio.getInterruptFlag()) {
       await sleep(200)
@@ -87,7 +93,7 @@ const runInterruptibleDescent = async (points) => {
  * @returns {Promise<number[][]>} one row per position: [q0, q1, q2, q3, x, y, z]
  */
 const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
-  const elevationMm = config.drivers.digitizer?.elevation ?? 50
+  const elevationMm = 50
   const [ox, oy, oz] = origin
   const { rows, cols } = grid
   const halfStep = stepMm / 2
