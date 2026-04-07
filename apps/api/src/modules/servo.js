@@ -5,45 +5,66 @@ import * as PCA9685 from '@/modules/drivers/PCA9685.js'
 import { performance } from 'node:perf_hooks'
 import { subscribe } from '@/modules/config.js'
 
-/** @type {ServoData} */
-let servos
-/** @type {number} */
-let dtMs
-/** @type {boolean} */
-let isDebug
-/** @type {(arg: 'home' | 'init') => ServoPosition} */
-let getPosition
-/** @type {ServoPosition} */
-let currentPosition
-/** @type {(arg: { angleDeg, servoName }) => number} */
-let angleDegToPulseUs
-
 /**
- * Set internal current position (e.g. after commanding angles outside toPoint/line).
- * @param {ServoPosition} position
+ * Live snapshot from config + motion state. Populated by `applyConfigFromSnapshot` (subscribe + immediate).
+ * @type {{
+ *   servos: ServoData
+ *   dtMs: number
+ *   isDebug: boolean
+ *   angleDegToPulseUs: (args: { angleDeg: number | null, servoName: ServoName }) => number
+ *   currentPosition: ServoPosition
+ * }}
  */
-const setCurrentPosition = (position) => {
-  currentPosition = { ...position }
+const runtime = {
+  servos: /** @type {ServoData} */ (/** @type {unknown} */ (null)),
+  dtMs: 0,
+  isDebug: false,
+  angleDegToPulseUs: /** @type {(args: { angleDeg: number | null, servoName: ServoName }) => number} */ (
+    () => {
+      throw new Error('servo runtime not initialized (config subscribe did not run)')
+    }
+  ),
+  currentPosition: /** @type {ServoPosition} */ (/** @type {unknown} */ (null))
 }
 
 /**
- * @param {number} angle Angle to interpolate pulseWidth for
- * @param {ServoCalPoint} begin Begin of the interpolation segment
- * @param {ServoCalPoint} end End of the interpolation segment
- * @returns {number} 
+ * @param {'home' | 'init'} positionName
+ * @returns {ServoPosition}
+ */
+function getPosition(positionName) {
+  return Object.entries(runtime.servos).reduce(
+    /** @param {*} acc */
+    (acc, [servoName, servo]) => ({
+      ...acc,
+      [servoName]: servo[positionName]
+    }),
+    {}
+  )
+}
+
+/**
+ * @param {ServoPosition} position
+ */
+const setCurrentPosition = (position) => {
+  runtime.currentPosition = { ...position }
+}
+
+/**
+ * @param {number} angle
+ * @param {ServoCalPoint} begin
+ * @param {ServoCalPoint} end
+ * @returns {number}
  */
 const interp = (angle, begin, end) => {
   const [a0, u0] = begin
   const [a1, u1] = end
   if (a1 === a0) throw new Error('Duplicate angleDeg in sortedPoints')
   const t = (angle - a0) / (a1 - a0)
-  // IMPORTANT: keep as float microseconds here.
-  // Rounding too early causes "stair-step" motion when angle increments are small.
   return u0 + t * (u1 - u0)
 }
 
 /**
- * @param {number} angleDeg angle to convert to pulse width
+ * @param {number} angleDeg
  * @param {{
  *   sortedPoints: Array<ServoCalPoint>
  *   fitting: ServoFitting
@@ -56,7 +77,6 @@ const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, fitting, clamp = true })
   }
   angleDeg = (angleDeg - fitting.offset) / fitting.scale
   const n = sortedPoints.length
-  // Handle left/right of table
   if (angleDeg <= sortedPoints[0][0]) {
     if (clamp) {
       return sortedPoints[0][1]
@@ -69,7 +89,6 @@ const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, fitting, clamp = true })
     }
     return interp(angleDeg, sortedPoints[n - 2], sortedPoints[n - 1])
   }
-  // Find segment [i, i+1]
   let lo = 0
   let hi = n - 1
   while (hi - lo > 1) {
@@ -82,62 +101,42 @@ const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, fitting, clamp = true })
   return interp(angleDeg, sortedPoints[lo], sortedPoints[lo + 1])
 }
 
-const angleDegToPulseUsFactory = ({ clamp = true } = {}) => {
-  const closure = Object.entries(servos).reduce(
+/**
+ * @param {ServoData} servos
+ * @param {{ clamp?: boolean }} [options]
+ */
+const buildAngleDegToPulseUs = (servos, { clamp = true } = {}) => {
+  const perServo = Object.entries(servos).reduce(
     (acc, [servoName, { calPoints, fitting }]) => {
       const sortedPoints = calPoints.slice().sort(
         (a, b) => a[0] - b[0]
       )
-      if (!acc[servoName]) {
-        acc[servoName] = {}
-      }
-      acc[servoName].sortedPoints = sortedPoints
-      acc[servoName].fitting = fitting
+      acc[servoName] = { sortedPoints, fitting }
       return acc
     },
-    {}
+    /** @type {Record<string, { sortedPoints: Array<ServoCalPoint>, fitting: ServoFitting }>} */({})
   )
-  /**
-   * @param {{
-   *   angleDeg: number | null
-   *   servoName: ServoName
-   * }} args
-   * @returns {number} pulseWidthUs
-   */
-  const handler = ({ angleDeg, servoName }) => angleDegToPulseUsRaw(angleDeg, { ...closure[servoName], clamp })
-  return handler
+  return ({ angleDeg, servoName }) =>
+    angleDegToPulseUsRaw(angleDeg, { ...perServo[servoName], clamp })
 }
 
-subscribe(config => {
-  servos = config.servos
-  dtMs = config.drivers.pca9685.dtMs
-  isDebug = config.options.debug
-  angleDegToPulseUs = angleDegToPulseUsFactory({ clamp: false })
-
+subscribe((config) => {
+  runtime.servos = config.servos
+  runtime.dtMs = config.drivers.pca9685.dtMs
+  runtime.isDebug = config.options.debug
+  runtime.angleDegToPulseUs = buildAngleDegToPulseUs(runtime.servos, { clamp: false })
+  runtime.currentPosition = getPosition('init')
 }, { immediate: true })
 
-getPosition = (positionName) => Object.entries(servos).reduce(
-  /** * @param {*} acc */
-  (acc, [servoName, servo]) => {
-    return {
-      ...acc,
-      [servoName]: servo[positionName]
-    }
-  },
-  {}
-)
-currentPosition = getPosition('init')
-
-
 /**
- * @param {ServoPosition} position joint angles in deg (keys = servo names)
+ * @param {ServoPosition} position
  * @returns {Array<{ channel: number, pulseWidthUs: number }>}
  */
 const positionToSetChannelsData = (position) => Object.entries(position).map(
-  /** @param {*} arg*/
+  /** @param {*} arg */
   ([servoName, angleDeg]) => ({
-    channel: servos[servoName].channel,
-    pulseWidthUs: angleDegToPulseUs({ angleDeg, servoName })
+    channel: runtime.servos[servoName].channel,
+    pulseWidthUs: runtime.angleDegToPulseUs({ angleDeg, servoName })
   })
 )
 
@@ -166,7 +165,7 @@ const setChannel = async ({ channel, pulseWidthUs }) => {
 }
 
 /**
- * @param {Array<SetChannel>} channels 
+ * @param {Array<SetChannel>} channels
  */
 const setChannels = async (channels) => {
   const sortedChannels = channels.slice().sort(
@@ -201,9 +200,9 @@ const setChannels = async (channels) => {
 
 const doRelax = async () => {
   await Promise.all(
-    Object.keys(servos).map(
-      async servoName => {
-        const { channel } = servos[servoName]
+    Object.keys(runtime.servos).map(
+      async (servoName) => {
+        const { channel } = runtime.servos[servoName]
         await setChannel({ channel, pulseWidthUs: 0 })
       }
     )
@@ -215,7 +214,6 @@ const doRelax = async () => {
  * @param {number} t in [0,1]
  */
 const easeQuintic = (t) => {
-  // 10t^3 - 15t^4 + 6t^5
   const t2 = t * t
   const t3 = t2 * t
   const t4 = t3 * t
@@ -224,13 +222,8 @@ const easeQuintic = (t) => {
 }
 
 /**
- * Path planner: chooses number of points from max speed, then eases.
- * - Uses a fixed update cadence (dtMs) and computes steps so that the maximum joint
- *   motion does not exceed vMaxDegPerSec.
- * - Interpolates in joint space with a smooth easing curve (quintic) to reduce jerk.
- *
- * @param {ServoPosition} from a point to start from (deg)
- * @param {ServoPosition} to a point to land at (deg)
+ * @param {ServoPosition} from
+ * @param {ServoPosition} to
  * @param {{
  *   dtMs?: number,
  *   vMaxDegPerSec?: number,
@@ -250,9 +243,9 @@ const pathPlanner = (from, to, options) => {
   if (easing !== 'quintic') throw new Error(`Unsupported easing: ${easing}`)
 
   const dtSec = dtMs / 1000
+  const servoNames = Object.keys(runtime.servos)
 
-  // Determine maximum joint swing in degrees.
-  const maxDeltaDeg = Object.keys(servos).reduce(
+  const maxDeltaDeg = servoNames.reduce(
     (acc, servoName) => {
       const d = Math.abs(to[servoName] - from[servoName])
       return d > acc ? d : acc
@@ -266,11 +259,11 @@ const pathPlanner = (from, to, options) => {
   const T = maxDeltaDeg * 15 / (8 * vMaxDegPerSec)
   const N = Math.max(2, Math.ceil(T / dtSec) + 1)
 
-  const points = Array(N).fill().map(
+  return Array(N).fill().map(
     (_, idx) => {
       const tau = idx / (N - 1)
       const s = easeQuintic(tau)
-      return Object.keys(servos).reduce(
+      return servoNames.reduce(
         /** @param {*} acc */
         (acc, servoName) => {
           const start = from[servoName]
@@ -282,13 +275,31 @@ const pathPlanner = (from, to, options) => {
       )
     }
   )
-
-  return points
 }
 
 /**
- * @param {ServoPosition} toPosition final position (angles in deg) to move servos
- * @param {Array<ServoPosition>} [via] list of intermediate points to be explicitly included
+ * @param {Array<{ point: ServoPosition, setChannelsData: Array<SetChannel> }>} steps
+ * @param {number} stepMs
+ */
+const executeTimedMotionSteps = async (steps, stepMs,) => {
+  let nextTick = performance.now() + stepMs
+  for (const { point, setChannelsData } of steps) {
+    await setChannels(setChannelsData)
+    runtime.currentPosition = point
+    const now = performance.now()
+    const slack = nextTick - now
+    if (slack > 0) {
+      await sleep(slack)
+      nextTick += stepMs
+    } else {
+      nextTick = now + stepMs
+    }
+  }
+}
+
+/**
+ * @param {ServoPosition} toPosition
+ * @param {Array<ServoPosition>} [via]
  * @param {{
  *   relax?: boolean,
  *   dtMs?: number,
@@ -300,12 +311,13 @@ const toPoint = async (toPosition, via = [], options) => {
     relax = true,
     vMaxDegPerSec = 60,
   } = options ?? {}
+  const motionStepMs = runtime.dtMs
   const { points } = [...via, toPosition].reduce(
     (acc, next, idx) => {
       const segmentPoints = pathPlanner(
         acc.last,
         next,
-        { dtMs, vMaxDegPerSec, easing: 'quintic' }
+        { dtMs: motionStepMs, vMaxDegPerSec, easing: 'quintic' }
       )
       if (idx > 0 && segmentPoints.length > 0) {
         segmentPoints.shift()
@@ -317,47 +329,32 @@ const toPoint = async (toPosition, via = [], options) => {
             point,
             setChannelsData: positionToSetChannelsData(point)
           })
-
         )
       )
       return acc
     },
     {
       points: [],
-      last: currentPosition
+      last: runtime.currentPosition
     }
   )
-  let nextTick = performance.now() + dtMs
-  for (const { point, setChannelsData } of points) {
-    await setChannels(setChannelsData)
-    currentPosition = point
-    const now = performance.now()
-    const slack = nextTick - now
-    if (slack > 0) {
-      await sleep(slack)
-      nextTick += dtMs
-    } else {
-      nextTick = now + dtMs
-    }
-  }
+  await executeTimedMotionSteps(points, motionStepMs)
   if (relax) {
     await doRelax()
   }
 }
 
 /**
- * @param {KinematicsOutput} start 
- * @param {KinematicsOutput} delta 
- * @param {{
- *   maxSpeed?: number
- * }} [options] 
+ * @param {KinematicsOutput} start
+ * @param {KinematicsOutput} delta
+ * @param {{ maxSpeed?: number }} [options]
  */
 const line = async (start, delta, options) => {
   const {
     maxSpeed = 100
   } = options ?? {}
-  const _dtMs = dtMs * 2
-  const dtSec = _dtMs / 1000
+  const lineStepMs = runtime.dtMs * 2
+  const dtSec = lineStepMs / 1000
   const maxDistance = Math.max(...Object.values(delta).map(Math.abs))
   const T = Math.round(maxDistance / maxSpeed)
   const N = Math.max(2, Math.ceil(T / dtSec) + 1)
@@ -375,25 +372,7 @@ const line = async (start, delta, options) => {
       }
     }
   )
-  let nextTick = performance.now() + _dtMs
-  let slackCounter = 0
-  for (const { point, setChannelsData } of points) {
-    await setChannels(setChannelsData)
-    currentPosition = point
-    const now = performance.now()
-    const slack = nextTick - now
-    if (slack > 0) {
-      await sleep(slack)
-      nextTick += _dtMs
-      slackCounter++
-    } else {
-      nextTick = now + _dtMs
-    }
-  }
-  if (isDebug) {
-    // The higher the number reported the better. Ideally 100% means that every step has a slack to sleep for. 
-    console.log(`Slacked motion ratio: ${Math.round(slackCounter / points.length * 100)}%`)
-  }
+  await executeTimedMotionSteps(points, lineStepMs)
 }
 
 export {
