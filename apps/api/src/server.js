@@ -11,7 +11,7 @@ import config from '@/controller/config.js'
 import { init as pca9685Init } from '@/modules/drivers/PCA9685.js'
 import { init as digitizerInit } from '@/modules/drivers/digitizer.js'
 import * as gpio from '@/modules/drivers/gpio.js'
-import { getPosition, toPoint } from '@/modules/servo.js'
+import { getPosePosition, toPoint } from '@/modules/servo.js'
 import { closeBus } from '@/modules/i2c.js'
 
 export default async (worker) => {
@@ -44,7 +44,7 @@ export default async (worker) => {
       process.off(signal, handler)
       console.warn(`Acting upon '${signal}' signal...`)
       gpio.stopWatch()
-      await toPoint(getPosition('init'), [], { relax: true })
+      await toPoint(getPosePosition('init'), [], { relax: true })
       await closeBus()
       process.kill(process.pid, signal)
     }

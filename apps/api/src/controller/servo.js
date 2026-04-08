@@ -6,21 +6,6 @@ import z from 'zod'
 const router = express.Router()
 
 router.post(
-  '/home',
-  async (req, res) => {
-    await servo.toPoint(servo.getPosition('home'), [], { relax: true })
-    res.sendStatus(200)
-  }
-)
-router.post(
-  '/init',
-  async (req, res) => {
-    await servo.toPoint(servo.getPosition('init'), [], { relax: true })
-    res.sendStatus(200)
-  }
-)
-
-router.post(
   '/relax',
   async (req, res) => {
     await servo.doRelax()

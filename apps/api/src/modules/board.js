@@ -1,5 +1,5 @@
 import * as servo from '@/modules/servo.js'
-import { IKK } from '@/modules/kinematics.js'
+import * as arm from '@/modules/arm.js'
 import { subscribe } from '@/modules/config.js'
 import { sleep } from './utils.js'
 
@@ -13,94 +13,6 @@ subscribe(config => {
   board = config.board
 }, { immediate: true })
 
-
-const release = async () => {
-  await servo.setChannel({
-    channel: board.grabberChannel,
-    pulseWidthUs: board.release
-  })
-}
-
-const grab = async () => {
-  await servo.setChannel({
-    channel: board.grabberChannel,
-    pulseWidthUs: board.grab
-  })
-}
-
-/**
- * @param {KinematicsOutput} to 
- * @param {{
- *   elevation?: number
- *   vMaxDegPerSec?: number
- *   delay?: number
- * }} [options] 
- */
-const descent = async (to, options) => {
-  const {
-    elevation = 50,
-    vMaxDegPerSec,
-    delay,
-  } = options ?? {}
-  const preTarget = {
-    ...to,
-    z: to.z + elevation
-  }
-  const logPoint = IKK(to)
-  console.log(Object.values(logPoint).map(v => Math.round(v * 100) / 100))
-
-  await servo.toPoint(IKK(preTarget), [], {
-    relax: false,
-    vMaxDegPerSec
-  })
-  await sleep(delay)
-  await servo.line(preTarget, { x: 0, y: 0, z: -elevation })
-  await servo.doRelax()
-}
-
-/**
- * @param {KinematicsOutput} to 
- * @param {{
- *   elevation?: number
- *   maxSpeed?: number
- * }} [options] 
- */
-const lift = async (to, options) => {
-  const {
-    elevation = 50,
-  } = options ?? {}
-  await servo.toPoint(IKK(to), [], { relax: false })
-  await servo.line(to, { x: 0, y: 0, z: elevation })
-}
-
-/**
- * @param {KinematicsOutput} at
- * @param {{
- *   delta?: number
- *   vMaxDegPerSec?: number
- * }} [options] 
- */
-const search = async (at, options) => {
-  let { x, y, z } = at
-  const {
-    delta = 5,
-    vMaxDegPerSec = 20
-  } = options ?? {}
-  const via = [
-    [0, 0, 0],
-    [-delta, -delta, 0],
-    [0, 0, 0],
-    [-delta, +delta, 0],
-    [0, 0, 0],
-    [+delta, +delta, 0],
-    [0, 0, 0],
-    [+delta, -delta, 0],
-    [0, 0, 0]
-  ].map(
-    ([dx, dy, dz]) => IKK({ x: x + dx, y: y + dy, z: z + dz })
-  )
-  await servo.toPoint(IKK({ x, y, z }), via, { vMaxDegPerSec, relax: false })
-}
 
 /**
  * Picks up and moves a piece `from` to `to` and returns to `home`
@@ -124,18 +36,18 @@ const move = async (args, options) => {
   Object.assign(to, {
     z: to.z + height
   })
-  await descent(from, { vMaxDegPerSec: 60, elevation, delay: 2000 })
+  await arm.descent(from, { vMaxDegPerSec: 60, elevation, delay: 2000 })
   await sleep(1000)
-  await grab()
-  await search(from, { delta: 5, vMaxDegPerSec: 20 })
+  await arm.grab()
+  await arm.search(from, { delta: 5, vMaxDegPerSec: 20 })
   await sleep(1000)
-  await lift(from, { elevation })
+  await arm.lift(from, { elevation })
   await sleep(1000)
-  await descent(to, { vMaxDegPerSec: 45, elevation, delay: 3000 })
+  await arm.descent(to, { vMaxDegPerSec: 45, elevation, delay: 3000 })
   await sleep(1000)
-  await release()
-  await lift(to, { elevation })
-  await servo.toPoint(servo.getPosition('home'), [], { relax: true })
+  await arm.release()
+  await arm.lift(to, { elevation })
+  await servo.toPoint(servo.getPosePosition('home'), [], { relax: true })
 }
 
 /**
@@ -179,22 +91,19 @@ const notationToPosition = (notation) => {
   return { x, y, z }
 }
 
-/**
- * @param {*} [options]
- */
-const home = async (options) => {
-  await servo.toPoint(servo.getPosition('home'), options)
+const to = async (notation, height) => {
+  const { x, y, z } = notationToPosition(notation)
+  await arm.toPose('home')
+  await arm.descent({
+    x,
+    y,
+    z: z + height
+  }, { vMaxDegPerSec: 30 })
 }
 
 export {
-  pieces,
-  home,
+  to,
   notationToPosition,
   move,
   remove,
-  search,
-  grab,
-  release,
-  descent,
-  lift
 }

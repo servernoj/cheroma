@@ -28,15 +28,15 @@ const runtime = {
 }
 
 /**
- * @param {'home' | 'init'} positionName
+ * @param {'home' | 'init'} poseName
  * @returns {ServoPosition}
  */
-function getPosition(positionName) {
+const getPosePosition = (poseName) => {
   return Object.entries(runtime.servos).reduce(
     /** @param {*} acc */
     (acc, [servoName, servo]) => ({
       ...acc,
-      [servoName]: servo[positionName]
+      [servoName]: servo[poseName]
     }),
     {}
   )
@@ -113,7 +113,7 @@ subscribe((config) => {
   runtime.dtMs = config.drivers.pca9685.dtMs
   runtime.isDebug = config.options.debug
   runtime.angleDegToPulseUs = buildAngleDegToPulseUs(runtime.servos, { clamp: false })
-  runtime.currentPosition = getPosition('init')
+  runtime.currentPosition = getPosePosition('init')
 }, { immediate: true })
 
 /**
@@ -361,7 +361,7 @@ const line = async (start, delta, options) => {
 }
 
 export {
-  getPosition,
+  getPosePosition,
   setCurrentPosition,
   positionToSetChannelsData,
   setChannel,

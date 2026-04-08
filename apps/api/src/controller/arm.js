@@ -1,45 +1,63 @@
 import express from 'express'
 import { IKK } from '@/modules/kinematics.js'
 import * as servo from '@/modules/servo.js'
-import * as board from '@/modules/board.js'
+import * as arm from '@/modules/arm.js'
 import { validator } from '@/controller/mw/index.js'
 import z from 'zod'
 
 const router = express.Router()
 
 router.post(
-  '/descent',
+  '/pose/:pose',
   validator({
-    body: z.object({
-      to: z.object({
-        x: z.number(),
-        y: z.number(),
-        z: z.number()
-      })
+    params: z.object({
+      pose: z.enum(['init', 'home'])
     })
   }),
   async (req, res) => {
-    const { to } = res.locals.parsed.body
-    await board.descent(to)
-    await servo.doRelax()
+    const { pose } = res.locals.parsed.params
+    await servo.toPoint(servo.getPosePosition(pose), [], { relax: true })
     res.sendStatus(200)
   }
 )
 
 router.post(
-  '/to',
+  '/xyz',
   validator({
+    query: z.object({
+      descent: z.boolean().default(false)
+    }),
     body: z.object({
-      to: z.object({
-        x: z.number(),
-        y: z.number(),
-        z: z.number()
-      })
+      x: z.number(),
+      y: z.number(),
+      z: z.number()
     })
   }),
   async (req, res) => {
-    const { to } = res.locals.parsed.body
-    await servo.toPoint(IKK(to), [], { relax: true })
+    const { descent } = res.locals.parsed.query
+    const to = res.locals.parsed.body
+    if (descent) {
+      await arm.descent(to)
+      await servo.doRelax()
+    } else {
+      await servo.toPoint(IKK(to), [], { relax: true })
+    }
+    res.sendStatus(200)
+  }
+)
+
+router.post(
+  '/grab',
+  async (req, res) => {
+    await arm.grab()
+    res.sendStatus(200)
+  }
+)
+
+router.post(
+  '/release',
+  async (req, res) => {
+    await arm.release()
     res.sendStatus(200)
   }
 )

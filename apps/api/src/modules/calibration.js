@@ -125,7 +125,7 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
         if (result === null) {
           await digitizer.clearDigitizerInterrupt()
           await digitizer.disableDigitizerInterrupts()
-          await servo.toPoint(servo.getPosition('home'), [], { relax: true })
+          await servo.toPoint(servo.getPosePosition('home'), [], { relax: true })
           throw new Error(
             `Calibration: no touch at grid (${i},${j}); descent completed without interrupt`
           )
@@ -142,7 +142,7 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
         poseData.push([...Qcmd, robotX, robotY, zMeas])
         // Return to home after every position so the next measurement starts from the same pose
         await servo.toPoint(IKK(preTarget), [], { relax: false })
-        await servo.toPoint(servo.getPosition('home'), [], { relax: true })
+        await servo.toPoint(servo.getPosePosition('home'), [], { relax: true })
       }
       // poseData: Array<[q0,q1,q2,q3,x,y,z]>
       if (!poseData.length || !poseData.every(r => r.length === poseData[0].length)) {
