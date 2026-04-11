@@ -21,17 +21,27 @@
         },
         {
           "address": 33,
+          "target": "r",
+          "offset": 16
+        },
+        {
+          "address": 34,
           "target": "c",
           "offset": 0
+        },
+        {
+          "address": 35,
+          "target": "c",
+          "offset": 16
         }
       ]
     }
   },
   "fitting": {
-    "roll": 0.4266,
-    "pitch": -9.1754,
-    "yaw": 0.9288,
-    "t": [ 16.1694, 0.0597, -51.9469]
+    "roll": 0,
+    "pitch": 0,
+    "yaw": 0,
+    "t": [ 0,0,0]
   },
   "servos": {
     "base": {
@@ -61,8 +71,8 @@
         [ -90.0, 850 ]
       ],
       "fitting": {
-        "scale": 0.9303, 
-        "offset": 1.5280
+        "scale": 1, 
+        "offset": 0
       },
       "home": 0,
       "init": 0,
@@ -92,8 +102,8 @@
         [-115.7, 2400]
       ],
       "fitting": {
-        "scale": 1.1500, 
-        "offset": -7.9405
+        "scale": 1, 
+        "offset": 0
       },
       "home": 0,
       "init": -90,
@@ -127,8 +137,8 @@
         [174.4,2450]
       ],
       "fitting": {
-        "scale": 0.8756, 
-        "offset": 18.8140
+        "scale": 1, 
+        "offset": 0
       },
       "home": 90,
       "init": 170,

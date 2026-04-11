@@ -36,7 +36,7 @@ subscribe(config => {
  * @returns {Array<{ xyz: KinematicsOutput, angles: ServoPosition }>}
  */
 const buildVerticalDescentTrajectory = (x, y, zTop, zBottom, options = {}) => {
-  const _dtMs = dtMs * 10
+  const _dtMs = dtMs
   const maxSpeedMmPerSec = options.maxSpeedMmPerSec ?? 50
   const deltaZ = zBottom - zTop
   const maxDistance = Math.abs(deltaZ)
@@ -60,7 +60,7 @@ const buildVerticalDescentTrajectory = (x, y, zTop, zBottom, options = {}) => {
  * @returns {Promise<{ index: number, xyz: KinematicsOutput, angles: ServoPosition } | null>} point at touch, or null if no interrupt
  */
 const runInterruptibleDescent = async (points) => {
-  const _dtMs = dtMs * 10
+  const _dtMs = dtMs * 2
   let nextTick = performance.now() + _dtMs
   for (let i = 0; i < points.length; i++) {
     const { angles } = points[i]
@@ -86,13 +86,21 @@ const runInterruptibleDescent = async (points) => {
  * Run a full calibration sequence: for each grid point, pre-target → descent until touch → record → home.
  * Returns a flat 2D array for the fitting algorithm: each row is [q0, q1, q2, q3, x, y, z].
  * Robot frame: X parallel to files, increasing with rank; Y parallel to ranks, decreasing from file a to h.
- * @param {[number, number, number]} origin [x,y,z] in robot frame for grid (0,0) — row1 & col1 corner
- * @param {{ rows: number, cols: number }} grid rows = rank index count, cols = file index count
- * @param {number} stepMm step between grid points (mm); touch is at cell center, offset by stepMm/2 on both axes
- * @param {number} repeat repeat each calibration point specified number of times
+ * @param {{    
+ *    origin: [number, number, number] 
+ *    grid: { rows: number, cols: number },
+ *    start: { rows: number, cols: number }
+ *    stepMm: number
+ *    repeat: number
+ * }} args
+ *  - origin: [x,y,z] in robot frame for grid (0,0) — row1 & col1 corner
+ *  - grid: rows = rank index count, cols = file index count
+ *  - start: initial starting point (rows/cols), defaults to (0,0)
+ *  - stepMm: step between grid points (mm); touch is at cell center, offset by stepMm/2 on both axes
+ *  - repeat: repeat each calibration point specified number of times
  * @returns {Promise<number[][]>} one row per position: [q0, q1, q2, q3, x, y, z]
  */
-const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
+const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) => {
   const elevationMm = 50
   const [ox, oy, oz] = origin
   const { rows, cols } = grid
@@ -100,15 +108,19 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
 
   /** @type {number[][]} */
   const data = []
+  let retry = false
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
+      const row = (start?.rows ?? 0) + i
+      const col = (start?.cols ?? 0) + j
       const poseData = []
-      for (let k = 0; k < repeat; k++) {
+      for (let k = 0; k < repeat; k += retry ? 0 : 1) {
         // i = rank index (X increases); j = file index (Y decreases from a to h). halfStep = center of cell.
-        const target = { x: ox + i * stepMm + halfStep, y: oy - j * stepMm - halfStep, z: oz }
+        const target = { x: ox + row * stepMm + halfStep, y: oy - col * stepMm - halfStep, z: oz }
         const preTarget = { ...target, z: target.z + elevationMm }
 
         await servo.toPoint(IKK(preTarget), [], { relax: false })
+        await sleep(1000)
 
         const trajectory = buildVerticalDescentTrajectory(
           target.x,
@@ -125,24 +137,33 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
         if (result === null) {
           await digitizer.clearDigitizerInterrupt()
           await digitizer.disableDigitizerInterrupts()
+          await servo.toPoint(IKK(preTarget), [], { relax: false })
           await servo.toPoint(servo.getPosePosition('home'), [], { relax: true })
           throw new Error(
-            `Calibration: no touch at grid (${i},${j}); descent completed without interrupt`
+            `Calibration: no touch at grid (${row},${col}); descent completed without interrupt`
           )
         }
 
         const touchData = await digitizer.readAndDrainTouchData()
-        const { x: digitizerX, y: digitizerY } = digitizer.touchDataToDigitizerXY(touchData)
+        let digitizerX, digitizerY
+
+        try {
+          const { x, y } = digitizer.touchDataToDigitizerXY(touchData)
+          digitizerX = x
+          digitizerY = y
+          retry = false
+        } catch {
+          retry = true
+          continue
+        }
         const [robotX, robotY] = [ox + digitizerY, oy - digitizerX]
         const zMeas = result.xyz.z
 
         const Qcmd = ['q0', 'q1', 'q2', 'q3'].map(
-          k => result.angles[servoNameByKinematics[k]]
+          key => result.angles[servoNameByKinematics[key]]
         )
         poseData.push([...Qcmd, robotX, robotY, zMeas])
-        // Return to home after every position so the next measurement starts from the same pose
         await servo.toPoint(IKK(preTarget), [], { relax: false })
-        await servo.toPoint(servo.getPosePosition('home'), [], { relax: true })
       }
       // poseData: Array<[q0,q1,q2,q3,x,y,z]>
       if (!poseData.length || !poseData.every(r => r.length === poseData[0].length)) {
@@ -167,7 +188,7 @@ const runCalibrationSequence = async (origin, grid, stepMm, repeat) => {
       data.push(poseData[bestIdx])
     }
   }
-
+  await servo.toPoint(servo.getPosePosition('home'), [], { relax: true })
   await digitizer.disableDigitizerInterrupts()
   return data
 }
