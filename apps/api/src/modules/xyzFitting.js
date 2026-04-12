@@ -4,14 +4,9 @@
  */
 import { Matrix, solve } from 'ml-matrix'
 import { cosd, sind, rotationMatrix, roundFactory } from './utils.js'
-import { subscribe } from '@/modules/config.js'
+import config from '../config.json' with {type: 'json'}
 
-/** @type {GeomData} */
-let geom
-
-subscribe(config => {
-  geom = config.geom
-}, { immediate: true })
+const geom = config.geom
 
 /**
  * Forward kinematics Q -> [x,y,z]

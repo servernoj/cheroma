@@ -36,8 +36,8 @@ subscribe(config => {
  * @returns {Array<{ xyz: KinematicsOutput, angles: ServoPosition }>}
  */
 const buildVerticalDescentTrajectory = (x, y, zTop, zBottom, options = {}) => {
-  const _dtMs = dtMs
-  const maxSpeedMmPerSec = options.maxSpeedMmPerSec ?? 50
+  const _dtMs = 8 * dtMs
+  const maxSpeedMmPerSec = options.maxSpeedMmPerSec ?? 10
   const deltaZ = zBottom - zTop
   const maxDistance = Math.abs(deltaZ)
   const dtSec = _dtMs / 1000
@@ -60,7 +60,7 @@ const buildVerticalDescentTrajectory = (x, y, zTop, zBottom, options = {}) => {
  * @returns {Promise<{ index: number, xyz: KinematicsOutput, angles: ServoPosition } | null>} point at touch, or null if no interrupt
  */
 const runInterruptibleDescent = async (points) => {
-  const _dtMs = dtMs * 2
+  const _dtMs = 8 * dtMs
   let nextTick = performance.now() + _dtMs
   for (let i = 0; i < points.length; i++) {
     const { angles } = points[i]
@@ -109,11 +109,13 @@ const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) =
   /** @type {number[][]} */
   const data = []
   let retry = false
+  let skipRecording = false
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
       const row = (start?.rows ?? 0) + i
       const col = (start?.cols ?? 0) + j
       const poseData = []
+      skipRecording = false
       for (let k = 0; k < repeat; k += retry ? 0 : 1) {
         // i = rank index (X increases); j = file index (Y decreases from a to h). halfStep = center of cell.
         const target = { x: ox + row * stepMm + halfStep, y: oy - col * stepMm - halfStep, z: oz }
@@ -135,13 +137,9 @@ const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) =
         const result = await runInterruptibleDescent(trajectory)
 
         if (result === null) {
-          await digitizer.clearDigitizerInterrupt()
-          await digitizer.disableDigitizerInterrupts()
-          await servo.toPoint(IKK(preTarget), [], { relax: false })
-          await servo.toPoint(servo.getPosePosition('home'), [], { relax: true })
-          throw new Error(
-            `Calibration: no touch at grid (${row},${col}); descent completed without interrupt`
-          )
+          console.warn(`Calibration: no touch at grid (${row},${col}); descent completed without interrupt`)
+          skipRecording = true
+          break
         }
 
         const touchData = await digitizer.readAndDrainTouchData()
@@ -164,6 +162,9 @@ const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) =
         )
         poseData.push([...Qcmd, robotX, robotY, zMeas])
         await servo.toPoint(IKK(preTarget), [], { relax: false })
+      }
+      if (skipRecording) {
+        continue
       }
       // poseData: Array<[q0,q1,q2,q3,x,y,z]>
       if (!poseData.length || !poseData.every(r => r.length === poseData[0].length)) {

@@ -6,6 +6,11 @@ Qcmd = X(:, 1:4);
 Xmeas = X(:, 5:7);
 ```
 
+## Configure arm geometry
+```
+geom0 = struct('H',131,'L1',211,'L2',265,'L3',125,'dX',20);
+```
+
 ## First run
 ```
 out1 = xyz_fitting(Qcmd, Xmeas, geom0, 180)
