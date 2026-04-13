@@ -113,7 +113,7 @@ subscribe((config) => {
   runtime.dtMs = config.drivers.pca9685.dtMs
   runtime.isDebug = config.options.debug
   runtime.angleDegToPulseUs = buildAngleDegToPulseUs(runtime.servos, { clamp: false })
-  runtime.currentPosition = getPosePosition('init')
+  runtime.currentPosition = runtime.currentPosition ?? getPosePosition('init')
 }, { immediate: true })
 
 /**
