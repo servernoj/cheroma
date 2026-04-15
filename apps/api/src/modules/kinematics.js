@@ -1,14 +1,17 @@
-import { Matrix } from 'ml-matrix'
-import { cosd, sind, rotationMatrix, d2r, r2d } from '@/modules/utils.js'
+import { cosd, sind, d2r, r2d } from '@/modules/utils.js'
 import { subscribe } from '@/modules/config.js'
 
 let geom
-let fitting
 let k2s
+/** @type {XYCorrection} */
+let xyCorr
+/** @type {ZCorrection} */
+let zCorr
 
 subscribe(config => {
   geom = config.geom
-  fitting = config.fitting
+  xyCorr = config.xyCorrection
+  zCorr = config.zCorrection
   k2s = Object.entries(config.servos).reduce(
     (acc, [servoName, { kinematics }]) => {
       acc[kinematics] = servoName
@@ -17,24 +20,6 @@ subscribe(config => {
     {}
   )
 }, { immediate: true })
-
-/**
- * @param {KinematicsOutput} P 
- * @returns {KinematicsOutput}
- */
-const toModel = P => {
-  const { roll, pitch, yaw, t } = fitting
-  const R = rotationMatrix(roll, pitch, yaw)
-  const pVec = Matrix.columnVector([P.x, P.y, P.z])
-  const tVec = Matrix.columnVector(t)
-  const diff = Matrix.subtract(pVec, tVec)
-  const P_ = R.transpose().mmul(diff)
-  return {
-    x: P_.get(0, 0),
-    y: P_.get(1, 0),
-    z: P_.get(2, 0)
-  }
-}
 
 /**
  * @param {KinematicsInput} K 
@@ -165,9 +150,78 @@ const IK = ({ x, y, z }, options) => {
 }
 
 /**
+ * Evaluate the forward quadratic mapping at (x, y).
+ * f(x,y) = c[0] + c[1]*x + c[2]*y + c[3]*x² + c[4]*x*y + c[5]*y²
+ * @param {XYCorrectionCoeffs} c
+ * @param {number} x
+ * @param {number} y
+ */
+const evalPoly = (c, x, y) =>
+  c[0] + c[1] * x + c[2] * y + c[3] * x * x + c[4] * x * y + c[5] * y * y
+
+/**
+ * Pre-distort target XY by inverting the fitted quadratic mapping via Newton's method.
+ * Model: xm = fx(xt, yt), ym = fy(xt, yt)  (quadratic polynomials)
+ * Finds (xi, yi) such that fx(xi, yi) = x_desired, fy(xi, yi) = y_desired.
+ * @param {KinematicsOutput} P
+ * @returns {KinematicsOutput}
+ */
+const applyXYCorrection = ({ x, y, z }) => {
+  const { cx, cy } = xyCorr
+  let xi = x, yi = y
+  for (let iter = 0; iter < 10; iter++) {
+    const fx = evalPoly(cx, xi, yi) - x
+    const fy = evalPoly(cy, xi, yi) - y
+    if (fx * fx + fy * fy < 1e-12) break
+    // Jacobian: J = [dfx/dx dfx/dy; dfy/dx dfy/dy]
+    const j00 = cx[1] + 2 * cx[3] * xi + cx[4] * yi
+    const j01 = cx[2] + cx[4] * xi + 2 * cx[5] * yi
+    const j10 = cy[1] + 2 * cy[3] * xi + cy[4] * yi
+    const j11 = cy[2] + cy[4] * xi + 2 * cy[5] * yi
+    const det = j00 * j11 - j01 * j10
+    xi -= ( j11 * fx - j01 * fy) / det
+    yi -= (-j10 * fx + j00 * fy) / det
+  }
+  return { x: xi, y: yi, z }
+}
+
+/**
+ * Evaluate the forward quadratic Z mapping.
+ * fz(x,y,z) = cz[0] + cz[1]*x + cz[2]*y + cz[3]*z + cz[4]*x² + cz[5]*y²
+ *            + cz[6]*z² + cz[7]*x*y + cz[8]*x*z + cz[9]*y*z
+ * @param {ZCorrectionCoeffs} cz
+ * @param {number} x
+ * @param {number} y
+ * @param {number} z
+ */
+const evalPolyZ = (cz, x, y, z) =>
+  cz[0] + cz[1] * x + cz[2] * y + cz[3] * z +
+  cz[4] * x * x + cz[5] * y * y + cz[6] * z * z +
+  cz[7] * x * y + cz[8] * x * z + cz[9] * y * z
+
+/**
+ * Pre-distort target Z by inverting the fitted quadratic Z mapping via Newton's method.
+ * Finds zi such that fz(x, y, zi) = z_desired (x, y are held fixed).
+ * @param {KinematicsOutput} P
+ * @returns {KinematicsOutput}
+ */
+const applyZCorrection = ({ x, y, z }) => {
+  const { cz } = zCorr
+  let zi = z
+  for (let iter = 0; iter < 10; iter++) {
+    const fz = evalPolyZ(cz, x, y, zi) - z
+    if (fz * fz < 1e-12) break
+    // dfz/dz = cz[3] + 2*cz[6]*z + cz[8]*x + cz[9]*y
+    const dfdz = cz[3] + 2 * cz[6] * zi + cz[8] * x + cz[9] * y
+    zi -= fz / dfdz
+  }
+  return { x, y, z: zi }
+}
+
+/**
  * @param {KinematicsOutput} P 
  * @returns {ServoPosition}
  */
-const IKK = P => K2S(IK(toModel(P)))
+const IKK = P => K2S(IK(applyZCorrection(applyXYCorrection(P))))
 
-export { FK, IK, IKK, K2S, toModel }
+export { FK, IK, IKK, K2S }

@@ -1,23 +1,21 @@
 ## Loading data
-Create local variable `X` by pasting CSV content from the calibration experiment
+Paste CSV content from the calibration endpoint into a MATLAB variable:
 ```
-X = [...]
-Qcmd = X(:, 1:4);
-Xmeas = X(:, 5:7);
-```
-
-## Configure arm geometry
-```
-geom0 = struct('H',131,'L1',211,'L2',265,'L3',125,'dX',20);
+D = [
+  ... paste CSV rows here ...
+];
 ```
 
-## First run
+## XY fitting
+Each row is `[x_target, y_target, x_measured, y_measured]`.
 ```
-out1 = xyz_fitting(Qcmd, Xmeas, geom0, 180)
+out = xy_position_fitting(D)
 ```
 
-## Second run
-It uses initialization data from the 1st run, i.e. `out1`
+## Z fitting
+Each row is `[x_target, y_target, z_target, z_measured]` (N×4) or `[x_target, y_target, z_target, x_measured, y_measured, z_measured]` (N×6).
 ```
-out2 = xyz_fitting(Qcmd, Xmeas, geom0, 180, struct('init',out1, 'freeGeom', {{'L2','L3'}}, 'geomRange',30))
+out = z_position_fitting(D)
 ```
+
+Both outputs include a ready-to-use JSON snippet for the corresponding `config.json` block.

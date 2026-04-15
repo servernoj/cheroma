@@ -1,5 +1,3 @@
-import { Matrix } from 'ml-matrix'
-
 /**
  * Sleep for specified number of milliseconds
  * @param {number} ms Sleep time
@@ -80,31 +78,6 @@ const cosd = d => Math.cos(d2r(d))
 
 const sind = d => Math.sin(d2r(d))
 
-const rotationMatrix = (rollDeg, pitchDeg, yawDeg) => {
-  const cr = cosd(rollDeg)
-  const sr = sind(rollDeg)
-  const cp = cosd(pitchDeg)
-  const sp = sind(pitchDeg)
-  const cy = cosd(yawDeg)
-  const sy = sind(yawDeg)
-  const Rx = new Matrix([
-    [1, 0, 0],
-    [0, cr, -sr],
-    [0, sr, cr]
-  ])
-  const Ry = new Matrix([
-    [cp, 0, sp],
-    [0, 1, 0],
-    [-sp, 0, cp]
-  ])
-  const Rz = new Matrix([
-    [cy, -sy, 0],
-    [sy, cy, 0],
-    [0, 0, 1]
-  ])
-  return Rz.mmul(Ry).mmul(Rx)
-}
-
 export {
   sleep,
   throttler,
@@ -114,6 +87,5 @@ export {
   d2r,
   r2d,
   cosd,
-  sind,
-  rotationMatrix
+  sind
 }

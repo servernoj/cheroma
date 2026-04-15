@@ -1,85 +1,60 @@
-#!/usr/bin/env node
-/**
- * Read calibration CSV: one row per sample, seven numbers only (no header row):
- *   q0,q1,q2,q3,x,y,z
- * Run xyz fitting; print JSON to stdout only (geometry from config.json).
- *
- * Pipe-friendly: nested `pnpm` echoes script banners to stdout and breaks `jq`.
- * Use pnpm’s logging switch (see `pnpm run --help`: `--loglevel` / `--silent`), e.g.
- *   from repo root: `pnpm run --silent fit-calibration ./meas.csv | jq .`
- * Or call Node directly (no pnpm noise): `node apps/api/src/fit-calibration.js ./meas.csv | jq .`
- */
 import { readFileSync } from 'node:fs'
-import { parse } from 'csv-parse/sync'
-import { resolve } from 'node:path'
-import { fitXyzFromMeasurements } from './modules/xyzFitting.js'
+import { fitXYCorrection } from './modules/xyFitting.js'
+import { fitZCorrection } from './modules/zFitting.js'
 
-function fail(message) {
-  process.stdout.write(
-    JSON.stringify({ ok: false, error: message }, null, 0) + '\n'
-  )
+const mode = process.argv[2]
+const csvPath = process.argv[3]
+
+if (!mode || !csvPath || !['xy', 'z'].includes(mode)) {
+  console.error('Usage: node fit-calibration.js <xy|z> <path-to-csv>')
+  console.error('  xy: CSV with N×4 [xt, yt, xm, ym]')
+  console.error('  z:  CSV with N×4 [xt, yt, zt, zm] or N×6 [xt, yt, zt, xm, ym, zm]')
   process.exit(1)
 }
 
-function parseNumericRows(records) {
-  /** @type {number[][]} */
-  const rows = []
-  for (let i = 0; i < records.length; i++) {
-    const row = records[i]
-    if (!Array.isArray(row) || row.length < 7) {
-      continue
+const raw = readFileSync(csvPath, 'utf-8')
+const data = raw
+  .split('\n')
+  .map(line => line.trim())
+  .filter(line => line && !line.startsWith('#'))
+  .map(line => line.split(',').map(Number))
+
+const fmt = v => v.toFixed(6)
+
+if (mode === 'xy') {
+  for (const [i, row] of data.entries()) {
+    if (row.length !== 4 || row.some(Number.isNaN)) {
+      console.error(`Bad row ${i + 1}: expected 4 numeric columns`)
+      process.exit(1)
     }
-    const nums = row.slice(0, 7).map(cell => Number(String(cell).trim()))
-    if (nums.some(n => !Number.isFinite(n))) {
-      continue
-    }
-    rows.push(nums)
   }
-  return rows
-}
-
-/** pnpm may pass a literal `--` as argv[2]; npm usually strips it. */
-const argvRest = process.argv.slice(2)
-if (argvRest[0] === '--') argvRest.shift()
-const csvPathArg = argvRest[0]
-if (!csvPathArg) {
-  fail('Usage: node src/fit-calibration.js <path-to.csv>')
-}
-
-const csvPath = resolve(process.cwd(), csvPathArg)
-let text
-try {
-  text = readFileSync(csvPath, 'utf8')
-} catch (e) {
-  fail(`Cannot read file: ${csvPath} (${e?.message ?? e})`)
-}
-
-let records
-try {
-  records = parse(text, {
-    columns: false,
-    skip_empty_lines: true,
-    trim: true,
-    relax_column_count: true
-  })
-} catch (e) {
-  fail(`CSV parse error: ${e?.message ?? e}`)
-}
-
-const rows = parseNumericRows(records)
-
-if (rows.length < 4) {
-  fail(
-    `Need at least 4 numeric rows with 7 columns each (q0,q1,q2,q3,x,y,z); no header row; got ${rows.length} valid row(s)`
-  )
-}
-
-const Qcmd = rows.map(r => r.slice(0, 4))
-const Xmeas = rows.map(r => r.slice(4, 7))
-
-try {
-  const out = fitXyzFromMeasurements({ Qcmd, Xmeas })
-  process.stdout.write(JSON.stringify(out, null, 2) + '\n')
-} catch (e) {
-  fail(e?.message ?? String(e))
+  const result = fitXYCorrection(data)
+  console.log('\n--- XY Position-Space Fitting (quadratic) ---')
+  console.log(`Samples:     ${result.N}`)
+  console.log(`Raw RMSE:    ${result.rmseRaw.toFixed(4)} mm  (before correction)`)
+  console.log(`Fit RMSE:    ${result.rmseFit.toFixed(4)} mm  (residual after quadratic model)`)
+  console.log(`cx: [${result.cx.map(fmt).join(', ')}]`)
+  console.log(`cy: [${result.cy.map(fmt).join(', ')}]`)
+  console.log('\nConfig JSON:')
+  console.log(JSON.stringify({ xyCorrection: { cx: result.cx, cy: result.cy } }, null, 2))
+} else {
+  const cols = data[0]?.length
+  if (cols !== 4 && cols !== 6) {
+    console.error(`Expected 4 or 6 columns, got ${cols}`)
+    process.exit(1)
+  }
+  for (const [i, row] of data.entries()) {
+    if (row.length !== cols || row.some(Number.isNaN)) {
+      console.error(`Bad row ${i + 1}: expected ${cols} numeric columns`)
+      process.exit(1)
+    }
+  }
+  const result = fitZCorrection(data)
+  console.log('\n--- Z Position-Space Fitting (quadratic) ---')
+  console.log(`Samples:     ${result.N}`)
+  console.log(`Raw RMSE:    ${result.rmseRaw.toFixed(4)} mm  (before correction)`)
+  console.log(`Fit RMSE:    ${result.rmseFit.toFixed(4)} mm  (residual after quadratic model)`)
+  console.log(`cz: [${result.cz.map(fmt).join(', ')}]`)
+  console.log('\nConfig JSON:')
+  console.log(JSON.stringify({ zCorrection: { cz: result.cz } }, null, 2))
 }

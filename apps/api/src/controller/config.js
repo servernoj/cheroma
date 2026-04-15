@@ -8,21 +8,9 @@ const router = express.Router()
 const optionsSchema = z.object({
   debug: z.boolean()
 })
-const fittingSchema = z.object({
-  roll: z.number(),
-  pitch: z.number(),
-  yaw: z.number(),
-  t: z.tuple([z.number(), z.number(), z.number()])
-})
-const servoFittingSchema = z.object({
-  scale: z.number(),
-  offset: z.number()
-})
 const servoSchema = z.record(
   z.enum(['base', 'shoulder', 'elbow', 'wrist']),
-  z.object({
-    fitting: servoFittingSchema
-  }).optional()
+  z.object({}).optional()
 )
 const boardSchema = z.object({
   originOffset: z.record(
@@ -39,13 +27,27 @@ const geomSchema = z.record(
   z.enum(['H', 'L1', 'L2', 'L3', 'dX']),
   z.number().optional()
 )
+const xyCoeffsSchema = z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()])
+const xyCorrectionSchema = z.object({
+  cx: xyCoeffsSchema,
+  cy: xyCoeffsSchema
+}).partial()
+
+const zCoeffsSchema = z.tuple([
+  z.number(), z.number(), z.number(), z.number(), z.number(),
+  z.number(), z.number(), z.number(), z.number(), z.number()
+])
+const zCorrectionSchema = z.object({
+  cz: zCoeffsSchema
+}).partial()
 
 const configSchema = z.object({
   options: optionsSchema,
-  fitting: fittingSchema,
   servos: servoSchema,
   board: boardSchema,
-  geom: geomSchema
+  geom: geomSchema,
+  xyCorrection: xyCorrectionSchema,
+  zCorrection: zCorrectionSchema
 }).partial()
 
 router.get(

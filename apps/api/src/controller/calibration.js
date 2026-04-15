@@ -29,7 +29,7 @@ router.post(
   }),
   async (req, res) => {
     const { origin, grid, start, stepMm, repeat } = res.locals.parsed.body
-    // data: number[][] — each row [q0, q1, q2, q3, x, y, z] for the fitting algorithm
+    // data: number[][] — each row [x_target, y_target, x_measured, y_measured]
     const data = await runCalibrationSequence({ origin, grid, start, stepMm, repeat })
     const rounder = roundFactory(2)
     const csv = data.map(r => r.map(rounder).join(',')).join('\n')

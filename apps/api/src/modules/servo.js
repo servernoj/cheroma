@@ -1,6 +1,6 @@
 import { writeRegister } from './i2c.js'
 import { sleep } from './utils.js'
-import { IK, toModel, K2S } from '@/modules/kinematics.js'
+import { IKK } from '@/modules/kinematics.js'
 import * as PCA9685 from '@/modules/drivers/PCA9685.js'
 import { performance } from 'node:perf_hooks'
 import { subscribe } from '@/modules/config.js'
@@ -64,11 +64,10 @@ const buildAngleDegToPulseUs = (servos, { clamp = true } = {}) => {
     return u0 + t * (u1 - u0)
   }
 
-  const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, fitting, clamp: clampAngle = true }) => {
+  const angleDegToPulseUsRaw = (angleDeg, { sortedPoints, clamp: clampAngle = true }) => {
     if (!Array.isArray(sortedPoints) || sortedPoints.length < 2) {
       throw new Error('sortedPoints must have at least 2 [angleDeg, pulseUs] points')
     }
-    angleDeg = (angleDeg - fitting.offset) / fitting.scale
     const n = sortedPoints.length
     if (angleDeg <= sortedPoints[0][0]) {
       if (clampAngle) {
@@ -95,14 +94,14 @@ const buildAngleDegToPulseUs = (servos, { clamp = true } = {}) => {
   }
 
   const perServo = Object.entries(servos).reduce(
-    (acc, [servoName, { calPoints, fitting }]) => {
+    (acc, [servoName, { calPoints }]) => {
       const sortedPoints = calPoints.slice().sort(
         (a, b) => a[0] - b[0]
       )
-      acc[servoName] = { sortedPoints, fitting }
+      acc[servoName] = { sortedPoints }
       return acc
     },
-    /** @type {Record<string, { sortedPoints: Array<ServoCalPoint>, fitting: ServoFitting }>} */({})
+    /** @type {Record<string, { sortedPoints: Array<ServoCalPoint> }>} */({})
   )
   return ({ angleDeg, servoName }) =>
     angleDegToPulseUsRaw(angleDeg, { ...perServo[servoName], clamp })
@@ -346,11 +345,11 @@ const line = async (start, delta, options) => {
   const denom = N - 1
   const points = Array(N).fill().map(
     (_, idx) => {
-      const point = K2S(IK(toModel({
+      const point = IKK({
         x: start.x + idx * delta.x / denom,
         y: start.y + idx * delta.y / denom,
         z: start.z + idx * delta.z / denom,
-      })))
+      })
       return {
         point,
         setChannelsData: positionToSetChannelsData(point)

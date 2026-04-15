@@ -20,17 +20,12 @@ declare global {
   // --
   type ServoCalPoint = [number, number]
   type ServoName = keyof typeof config['servos']
-  type ServoFitting = {
-    scale: number
-    offset: number
-  }
   type ServoData = {
     [name in ServoName]: {
       channel: number
       home: number
       init: number
       calPoints: Array<ServoCalPoint>
-      fitting: ServoFitting
     }
   }
   type ServoPosition = {
@@ -40,12 +35,6 @@ declare global {
   type GeomName = keyof typeof config['geom']
   type GeomData = {
     [name in GeomName]: number
-  }
-  type Fitting = {
-    roll: number
-    pitch: number
-    yaw: number
-    t: Array<number>
   }
   type Board = {
     originOffset: KinematicsOutput,
@@ -83,6 +72,15 @@ declare global {
     gpio: GpioConfig
     digitizer: Digitizer
   }
+  type XYCorrectionCoeffs = [number, number, number, number, number, number]
+  type XYCorrection = {
+    cx: XYCorrectionCoeffs
+    cy: XYCorrectionCoeffs
+  }
+  type ZCorrectionCoeffs = [number, number, number, number, number, number, number, number, number, number]
+  type ZCorrection = {
+    cz: ZCorrectionCoeffs
+  }
   type Options = {
     debug: boolean
   }
@@ -95,7 +93,8 @@ declare global {
     options: Options
     servos: ServoData
     geom: GeomData
-    fitting: Fitting
+    xyCorrection: XYCorrection
+    zCorrection: ZCorrection
     board: Board
     pieces: Pieces
     drivers: Drivers

@@ -1,7 +1,7 @@
 /**
- * Calibration: automated collection of (Qcmd, Xmeas) at a grid of points for model fitting.
+ * Calibration: collect (target XY, measured XY) pairs at a grid of points for position-space fitting.
  * Flow per point: move to pre-target (Z + elevationMm), vertical descent until digitizer
- * touch, record commanded angles and measured XYZ, clear interrupt, return to home.
+ * touch, record target and measured XY, clear interrupt, return to home.
  */
 import { subscribe } from '@/modules/config.js'
 import { IKK } from '@/modules/kinematics.js'
@@ -12,18 +12,9 @@ import { median, sleep } from '@/modules/utils.js'
 import { performance } from 'node:perf_hooks'
 
 let dtMs = Infinity
-/**
- * @type {{[k in keyof KinematicsInput]: ServoName}}
- */
-let servoNameByKinematics
 
 subscribe(config => {
   dtMs = config.drivers.pca9685.dtMs
-  servoNameByKinematics = Object.entries(config.servos).reduce(
-    /** @param {*} acc */
-    (acc, [servoName, { kinematics }]) => ({ ...acc, [kinematics]: servoName }),
-    {}
-  )
 }, { immediate: true })
 
 /**
@@ -84,7 +75,7 @@ const runInterruptibleDescent = async (points) => {
 
 /**
  * Run a full calibration sequence: for each grid point, pre-target → descent until touch → record → home.
- * Returns a flat 2D array for the fitting algorithm: each row is [q0, q1, q2, q3, x, y, z].
+ * Returns a flat 2D array for position-space fitting: each row is [x_target, y_target, x_measured, y_measured].
  * Robot frame: X parallel to files, increasing with rank; Y parallel to ranks, decreasing from file a to h.
  * @param {{    
  *    origin: [number, number, number] 
@@ -98,7 +89,7 @@ const runInterruptibleDescent = async (points) => {
  *  - start: initial starting point (rows/cols), defaults to (0,0)
  *  - stepMm: step between grid points (mm); touch is at cell center, offset by stepMm/2 on both axes
  *  - repeat: repeat each calibration point specified number of times
- * @returns {Promise<number[][]>} one row per position: [q0, q1, q2, q3, x, y, z]
+ * @returns {Promise<number[][]>} one row per position: [x_target, y_target, x_measured, y_measured]
  */
 const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) => {
   const elevationMm = 50
@@ -114,11 +105,12 @@ const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) =
     for (let j = 0; j < cols; j++) {
       const row = (start?.rows ?? 0) + i
       const col = (start?.cols ?? 0) + j
+      const targetX = ox + row * stepMm + halfStep
+      const targetY = oy - col * stepMm - halfStep
       const poseData = []
       skipRecording = false
       for (let k = 0; k < repeat; k += retry ? 0 : 1) {
-        // i = rank index (X increases); j = file index (Y decreases from a to h). halfStep = center of cell.
-        const target = { x: ox + row * stepMm + halfStep, y: oy - col * stepMm - halfStep, z: oz }
+        const target = { x: targetX, y: targetY, z: oz }
         const preTarget = { ...target, z: target.z + elevationMm }
 
         await servo.toPoint(IKK(preTarget), [], { relax: false })
@@ -154,24 +146,17 @@ const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) =
           retry = true
           continue
         }
-        const [robotX, robotY] = [ox + digitizerY, oy - digitizerX]
-        const zMeas = result.xyz.z
-
-        const Qcmd = ['q0', 'q1', 'q2', 'q3'].map(
-          key => result.angles[servoNameByKinematics[key]]
-        )
-        poseData.push([...Qcmd, robotX, robotY, zMeas])
+        const [measX, measY] = [ox + digitizerY, oy - digitizerX]
+        poseData.push([targetX, targetY, measX, measY])
         await servo.toPoint(IKK(preTarget), [], { relax: false })
       }
       if (skipRecording) {
         continue
       }
-      // poseData: Array<[q0,q1,q2,q3,x,y,z]>
-      if (!poseData.length || !poseData.every(r => r.length === poseData[0].length)) {
+      if (!poseData.length || !poseData.every(r => r.length === 4)) {
         throw new Error('Calibration: invalid poseData shape')
       }
       const colMedians = poseData[0].map((_, col) => median(poseData.map(r => r[col])))
-      const weights = [0.5, 0.5, 0.5, 1, 1, 1, 1]
       let bestIdx = 0
       let bestScore = Infinity
       for (let i = 0; i < poseData.length; i++) {
@@ -179,7 +164,7 @@ const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) =
         let s = 0
         for (let j = 0; j < row.length; j++) {
           const d = row[j] - colMedians[j]
-          s += weights[j] * d * d
+          s += d * d
         }
         if (s < bestScore) {
           bestScore = s
