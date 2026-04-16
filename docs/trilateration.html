@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beam-Gauge Trilateration – POI Solver</title>
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+<style>
+  :root { color-scheme: light; }
+  body {
+    max-width: 960px;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.6;
+    color: #1a1a1a;
+    background: #fdfdfd;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid #333; padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2rem; }
+  .eq {
+    background: #f4f4f0;
+    border-left: 3px solid #888;
+    padding: .8rem 1.2rem;
+    margin: 1rem 0;
+    overflow-x: auto;
+  }
+  code { background: #eee; padding: .15em .35em; border-radius: 3px; font-size: .9em; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 230px 1fr;
+    gap: 1.25rem;
+    align-items: start;
+    margin: 1rem 0 1.5rem;
+  }
+  .panel {
+    background: #f7f7f2;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: .85rem 1rem;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: .88rem;
+  }
+  .panel h3 {
+    margin: .1rem 0 .5rem;
+    font-size: .95rem;
+    font-family: Georgia, serif;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: .2rem;
+  }
+  .row { display: flex; align-items: center; gap: .5rem; margin: .22rem 0; }
+  .row label { flex: 0 0 3.2rem; font-size: .82rem; color: #333; }
+  .row input[type=number], .row select {
+    flex: 1; min-width: 0;
+    font: inherit; padding: .15rem .35rem;
+    border: 1px solid #bbb; border-radius: 3px;
+    background: #fff;
+  }
+  .results {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: .8rem; line-height: 1.55;
+    white-space: pre-wrap;
+  }
+  .results .ok { color: #226633; font-weight: 600; }
+  .results .bad { color: #aa2222; font-weight: 600; }
+  .viz {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  svg text { font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; fill: #222; }
+  .grid-line  { stroke: #eee; stroke-width: .5; }
+  .axis-line  { stroke: #bbb; stroke-width: 1; }
+  .baseline   { stroke: #2b6cb0; stroke-width: 2; }
+  .arc        { fill: none; stroke: #c0392b; stroke-width: 1; stroke-dasharray: 3 3; opacity: .55; }
+  .radial     { stroke: #c0392b; stroke-width: 1.2; opacity: .75; }
+  .altitude   { stroke: #e67e22; stroke-width: 1.5; stroke-dasharray: 5 3; }
+  .anchor-dot { fill: #2b6cb0; }
+  .foot-dot   { fill: #e67e22; }
+  .poi-dot    { fill: #c0392b; }
+</style>
+</head>
+<body>
+
+<h1>Beam-Gauge Trilateration – POI Solver</h1>
+
+<p>
+Top-down view of the anchor plane. Two mount points $A_1$, $A_2$ (same
+elevation) define a baseline. The beam gauge, leveled at each anchor in
+turn, reads horizontal distances $d_1$ and $d_2$ to the point of interest.
+The drop-probe setting $h$ is added back in at the end to lift the result
+into 3-D. Drag the numeric fields to explore.
+</p>
+
+<div class="layout">
+  <div>
+    <div class="panel">
+      <h3>Anchor A₁</h3>
+      <div class="row"><label>x₁</label><input id="A1x" type="number" step="1" value="50"></div>
+      <div class="row"><label>y₁</label><input id="A1y" type="number" step="1" value="100"></div>
+      <div class="row"><label>z₁</label><input id="A1z" type="number" step="1" value="0"></div>
+
+      <h3 style="margin-top:.8rem">Anchor A₂</h3>
+      <div class="row"><label>x₂</label><input id="A2x" type="number" step="1" value="50"></div>
+      <div class="row"><label>y₂</label><input id="A2y" type="number" step="1" value="-100"></div>
+      <div class="row"><label>z₂</label><input id="A2z" type="number" step="1" value="0"></div>
+
+      <h3 style="margin-top:.8rem">Measurements</h3>
+      <div class="row"><label>d₁</label><input id="d1" type="number" step="0.001" value="304.138"></div>
+      <div class="row"><label>d₂</label><input id="d2" type="number" step="0.001" value="390.512"></div>
+      <div class="row"><label>h</label><input id="h" type="number" step="1" value="40"></div>
+      <div class="row"><label>side</label>
+        <select id="side">
+          <option value="1" selected>+  (right of A₂→A₁)</option>
+          <option value="-1">−  (left of A₂→A₁)</option>
+        </select>
+      </div>
+      <div class="row"><label>σ<sub>d</sub></label><input id="sigma" type="number" step="0.01" value="0.1"></div>
+    </div>
+
+    <div class="panel" style="margin-top:.8rem">
+      <h3>Results</h3>
+      <div id="results" class="results"></div>
+    </div>
+  </div>
+
+  <svg id="viz" class="viz" viewBox="0 0 600 480" preserveAspectRatio="xMidYMid meet"></svg>
+</div>
+
+<h2>1. Baseline frame</h2>
+<p>
+Attach a local frame to the two anchors:
+</p>
+<div class="eq">
+$$\mathbf{u} = \frac{A_1 - A_2}{\lVert A_1 - A_2 \rVert}, \qquad
+  L = \lVert A_1 - A_2 \rVert, \qquad
+  \mathbf{v} = \pm\,(\mathbf{u} \times \hat{\mathbf{z}}).$$
+</div>
+<p>
+$\mathbf{u}$ runs from $A_2$ to $A_1$ along the baseline;
+$\mathbf{v}$ is the in-plane unit vector perpendicular to $\mathbf{u}$.
+The sign of $\mathbf{v}$ resolves the mirror ambiguity (which side of the
+baseline the POI lies on).
+</p>
+
+<h2>2. Parameterize the POI on the anchor plane</h2>
+<p>
+Write the foot of the POI on the anchor plane as $F = A_2 + s\,\mathbf{u} + n\,\mathbf{v}$.
+The two measured horizontal distances give
+</p>
+<div class="eq">
+$$d_2^{\,2} = s^{2} + n^{2}, \qquad d_1^{\,2} = (s - L)^{2} + n^{2}.$$
+</div>
+<p>Subtracting eliminates $n$:</p>
+<div class="eq">
+$$d_2^{\,2} - d_1^{\,2} = s^{2} - (s-L)^{2} = 2\,L\,s - L^{2}
+\;\;\Longrightarrow\;\;
+\boxed{\;s = \dfrac{d_2^{\,2} - d_1^{\,2} + L^{2}}{2\,L}\;}$$
+</div>
+<p>and back-substituting gives the altitude:</p>
+<div class="eq">
+$$\boxed{\;n = \sqrt{\,d_2^{\,2} - s^{2}\,}\;}$$
+</div>
+<p>Finally,</p>
+<div class="eq">
+$$F = A_2 + s\,\mathbf{u}, \qquad
+  \text{POI} = F + n\,\mathbf{v} + h\,\hat{\mathbf{z}}.$$
+</div>
+
+<h2>3. Error sensitivity</h2>
+<p>
+Assuming independent Gaussian errors $\sigma_d$ on both distance readings,
+first-order propagation gives
+</p>
+<div class="eq">
+$$\sigma_s = \dfrac{\sqrt{d_1^{\,2} + d_2^{\,2}}}{L}\,\sigma_d, \qquad
+  \sigma_n = \dfrac{\sqrt{d_1^{\,2}\,s^{2} + d_2^{\,2}\,(L-s)^{2}}}{L\,n}\,\sigma_d.$$
+</div>
+<p>
+The only way $\sigma_n$ blows up is $n \to 0$, i.e., when the POI approaches
+the line through $A_1$ and $A_2$. Keep the POI away from the extended
+baseline and the geometry is well-conditioned.
+</p>
+
+<h2>4. Reference implementation</h2>
+<p>The live panel above runs this exact procedure in JavaScript; the same logic in Python:</p>
+<div class="eq"><pre style="margin:0;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:.85rem;">
+import numpy as np
+
+def trilaterate(A1, A2, d1, d2, h=0.0, side=+1):
+    A1 = np.asarray(A1, float); A2 = np.asarray(A2, float)
+    L  = np.linalg.norm(A1 - A2)
+    u  = (A1 - A2) / L
+    v  = side * np.cross(u, [0, 0, 1])          # right of A2→A1 when side=+1
+    s  = (d2**2 - d1**2 + L**2) / (2*L)
+    n  = np.sqrt(max(d2**2 - s**2, 0.0))
+    foot = A2 + s*u
+    poi  = foot + n*v + np.array([0, 0, h])
+    return poi, foot, n
+</pre></div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, text) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+
+  const sub   = (a,b) => a.map((v,i)=>v-b[i]);
+  const add   = (a,b) => a.map((v,i)=>v+b[i]);
+  const scl   = (a,k) => a.map(v=>v*k);
+  const norm  = a => Math.hypot(a[0], a[1], a[2]);
+  const cross = (a,b) => [
+    a[1]*b[2]-a[2]*b[1],
+    a[2]*b[0]-a[0]*b[2],
+    a[0]*b[1]-a[1]*b[0],
+  ];
+
+  function getInputs() {
+    return {
+      A1: [+$('A1x').value, +$('A1y').value, +$('A1z').value],
+      A2: [+$('A2x').value, +$('A2y').value, +$('A2z').value],
+      d1: +$('d1').value,
+      d2: +$('d2').value,
+      h:  +$('h').value,
+      side: +$('side').value,
+      sigma: +$('sigma').value,
+    };
+  }
+
+  function solve(inp) {
+    const {A1, A2, d1, d2, h, side, sigma} = inp;
+    const baseline = sub(A1, A2);
+    const L = norm(baseline);
+    if (L < 1e-6) return {error: 'Anchors are coincident (L = 0).', A1, A2, d1, d2, h};
+
+    const u = scl(baseline, 1/L);
+    const v = scl(cross(u, [0,0,1]), side);
+
+    const s = (d2*d2 - d1*d1 + L*L) / (2*L);
+    const n2 = d2*d2 - s*s;
+    if (n2 < 0) {
+      return {
+        error: `No intersection: d₁, d₂ inconsistent with L = ${L.toFixed(2)} (n² = ${n2.toFixed(2)}).`,
+        A1, A2, d1, d2, h, L, u, s
+      };
+    }
+    const n = Math.sqrt(n2);
+    const foot = add(A2, scl(u, s));
+    const poi  = add(add(foot, scl(v, n)), [0, 0, h]);
+
+    const sigma_s = Math.sqrt(d1*d1 + d2*d2) / L * sigma;
+    const sigma_n = n > 1e-9
+      ? Math.sqrt(d1*d1*s*s + d2*d2*(L-s)*(L-s)) / (L*n) * sigma
+      : Infinity;
+
+    return {A1, A2, d1, d2, h, L, u, v, s, n, foot, poi, sigma_s, sigma_n};
+  }
+
+  const fmt    = (x, k=3) => Number.isFinite(x) ? x.toFixed(k) : String(x);
+  const fmtVec = (v, k=3) => '[' + v.map(x=>fmt(x,k)).join(', ') + ']';
+
+  function renderResults(r) {
+    const out = $('results');
+    if (r.error) { out.innerHTML = `<span class="bad">⚠ ${r.error}</span>`; return; }
+    out.innerHTML =
+`<span class="ok">POI   = ${fmtVec(r.poi, 3)}</span>
+foot  = ${fmtVec(r.foot, 3)}
+s     = ${fmt(r.s)}    along baseline from A₂
+n     = ${fmt(r.n)}    altitude
+L     = ${fmt(r.L)}    baseline length
+σ_s   = ${fmt(r.sigma_s)}  mm
+σ_n   = ${fmt(r.sigma_n)}  mm`;
+  }
+
+  function renderSVG(r) {
+    const svg = $('viz');
+    svg.innerHTML = '';
+
+    const W = 600, H = 480;
+
+    if (r.error) {
+      svg.appendChild(el('rect', {x:0, y:0, width:W, height:H, fill:'#fff'}));
+      svg.appendChild(el('text',
+        {x: W/2, y: H/2, 'text-anchor':'middle', fill:'#aa2222', 'font-size':'14'},
+        r.error));
+      return;
+    }
+
+    const pts = [
+      [r.A1[0], r.A1[1]],
+      [r.A2[0], r.A2[1]],
+      [r.foot[0], r.foot[1]],
+      [r.poi[0], r.poi[1]],
+      [0, 0],
+      [r.A1[0]+r.d1, r.A1[1]], [r.A1[0]-r.d1, r.A1[1]],
+      [r.A1[0], r.A1[1]+r.d1], [r.A1[0], r.A1[1]-r.d1],
+      [r.A2[0]+r.d2, r.A2[1]], [r.A2[0]-r.d2, r.A2[1]],
+      [r.A2[0], r.A2[1]+r.d2], [r.A2[0], r.A2[1]-r.d2],
+    ];
+    let minX = Math.min(...pts.map(p=>p[0]));
+    let maxX = Math.max(...pts.map(p=>p[0]));
+    let minY = Math.min(...pts.map(p=>p[1]));
+    let maxY = Math.max(...pts.map(p=>p[1]));
+
+    const spanX = maxX - minX, spanY = maxY - minY;
+    const pad = 0.08 * Math.max(spanX, spanY, 1);
+    minX -= pad; maxX += pad; minY -= pad; maxY += pad;
+
+    const margin = 30;
+    const K = Math.min(
+      (W - 2*margin) / (maxX - minX),
+      (H - 2*margin) / (maxY - minY),
+    );
+    const cx = (maxX + minX)/2, cy = (maxY + minY)/2;
+    const toS = (x, y) => [
+      W/2 + (x - cx) * K,
+      H/2 - (y - cy) * K,
+    ];
+
+    const gridStep = (() => {
+      const target = Math.max(spanX, spanY) / 10;
+      const mag = Math.pow(10, Math.floor(Math.log10(target)));
+      const n   = target / mag;
+      return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * mag;
+    })();
+
+    for (let x = Math.ceil(minX/gridStep)*gridStep; x <= maxX; x += gridStep) {
+      const [x1, y1] = toS(x, minY), [x2, y2] = toS(x, maxY);
+      svg.appendChild(el('line', {x1, y1, x2, y2, class:'grid-line'}));
+    }
+    for (let y = Math.ceil(minY/gridStep)*gridStep; y <= maxY; y += gridStep) {
+      const [x1, y1] = toS(minX, y), [x2, y2] = toS(maxX, y);
+      svg.appendChild(el('line', {x1, y1, x2, y2, class:'grid-line'}));
+    }
+
+    if (0 >= minX && 0 <= maxX) {
+      const [x1, y1] = toS(0, minY), [x2, y2] = toS(0, maxY);
+      svg.appendChild(el('line', {x1, y1, x2, y2, class:'axis-line'}));
+    }
+    if (0 >= minY && 0 <= maxY) {
+      const [x1, y1] = toS(minX, 0), [x2, y2] = toS(maxX, 0);
+      svg.appendChild(el('line', {x1, y1, x2, y2, class:'axis-line'}));
+    }
+
+    {
+      const [ax, ay] = toS(r.A1[0], r.A1[1]);
+      svg.appendChild(el('circle', {cx:ax, cy:ay, r:r.d1*K, class:'arc'}));
+    }
+    {
+      const [ax, ay] = toS(r.A2[0], r.A2[1]);
+      svg.appendChild(el('circle', {cx:ax, cy:ay, r:r.d2*K, class:'arc'}));
+    }
+
+    {
+      const [x1, y1] = toS(r.A1[0], r.A1[1]);
+      const [x2, y2] = toS(r.A2[0], r.A2[1]);
+      svg.appendChild(el('line', {x1, y1, x2, y2, class:'baseline'}));
+    }
+
+    for (const [A, label] of [[r.A1, 'd₁'], [r.A2, 'd₂']]) {
+      const [x1, y1] = toS(A[0], A[1]);
+      const [x2, y2] = toS(r.poi[0], r.poi[1]);
+      svg.appendChild(el('line', {x1, y1, x2, y2, class:'radial'}));
+      const mx = x1 + (x2-x1)*0.55, my = y1 + (y2-y1)*0.55;
+      svg.appendChild(el('text', {x:mx+5, y:my-4, fill:'#8b2010', 'font-weight':'bold'}, label));
+    }
+
+    {
+      const [x1, y1] = toS(r.foot[0], r.foot[1]);
+      const [x2, y2] = toS(r.poi[0], r.poi[1]);
+      svg.appendChild(el('line', {x1, y1, x2, y2, class:'altitude'}));
+      const mx = (x1+x2)/2, my = (y1+y2)/2;
+      svg.appendChild(el('text', {x:mx+6, y:my+3, fill:'#8f5210'}, `n = ${fmt(r.n,2)}`));
+    }
+
+    for (const [A, label] of [[r.A1, 'A₁'], [r.A2, 'A₂']]) {
+      const [xp, yp] = toS(A[0], A[1]);
+      svg.appendChild(el('circle', {cx:xp, cy:yp, r:5, class:'anchor-dot'}));
+      svg.appendChild(el('text', {x:xp+9, y:yp-7},
+        `${label} (${fmt(A[0],0)}, ${fmt(A[1],0)})`));
+    }
+
+    {
+      const [xp, yp] = toS(r.foot[0], r.foot[1]);
+      svg.appendChild(el('circle', {cx:xp, cy:yp, r:4, class:'foot-dot'}));
+      svg.appendChild(el('text', {x:xp+8, y:yp+14, fill:'#8f5210'},
+        `F (${fmt(r.foot[0],1)}, ${fmt(r.foot[1],1)})`));
+    }
+
+    {
+      const [xp, yp] = toS(r.poi[0], r.poi[1]);
+      svg.appendChild(el('circle', {cx:xp, cy:yp, r:6, class:'poi-dot'}));
+      svg.appendChild(el('text', {x:xp+10, y:yp-9, fill:'#8b2010', 'font-weight':'bold'},
+        `POI (${fmt(r.poi[0],1)}, ${fmt(r.poi[1],1)}, ${fmt(r.poi[2],1)})`));
+    }
+
+    const legend = [
+      ['Baseline A₁–A₂',      '#2b6cb0'],
+      ['d₁, d₂ reach circles','#c0392b'],
+      ['Altitude F→POI',      '#e67e22'],
+    ];
+    legend.forEach(([t, col], i) => {
+      const y = 18 + i*16;
+      svg.appendChild(el('rect', {x:10, y:y-9, width:10, height:10, fill:col, opacity:.75}));
+      svg.appendChild(el('text', {x:25, y:y, fill:'#444'}, t));
+    });
+
+    svg.appendChild(el('text', {x:W-10, y:H-10, 'text-anchor':'end', fill:'#888'},
+      `grid ${gridStep} mm · 1 mm ≈ ${K.toFixed(2)} px`));
+  }
+
+  function update() {
+    const r = solve(getInputs());
+    renderResults(r);
+    renderSVG(r);
+  }
+
+  document.querySelectorAll('input, select').forEach(e => e.addEventListener('input', update));
+  update();
+</script>
+
+</body>
+</html>
