@@ -1,19 +1,21 @@
 import { Matrix } from 'ml-matrix'
 
 /**
- * Fit quadratic mapping from target (x, y, z) to measured z.
+ * Fit affine mapping from target (x, y, z) to measured z.
  *
  * Model:
- *   zm = cz[0] + cz[1]*x + cz[2]*y + cz[3]*z + cz[4]*x² + cz[5]*y²
- *        + cz[6]*z² + cz[7]*x*y + cz[8]*x*z + cz[9]*y*z
+ *   zm = cz[0] + cz[1]*x + cz[2]*y + cz[3]*z
  *
- * Identity: cz = [0,0,0,1,0,0,0,0,0,0].
+ * Identity: cz = [0, 0, 0, 1].
+ *
+ * Correction (applied before IK):
+ *   zi = (z_desired - cz[0] - cz[1]*x - cz[2]*y) / cz[3]
  *
  * Input can be N×6 [xt, yt, zt, xm, ym, zm] or N×4 [xt, yt, zt, zm].
  *
  * @param {number[][]} data
  * @returns {{
- *   cz: [number, number, number, number, number, number, number, number, number, number],
+ *   cz: [number, number, number, number],
  *   rmseRaw: number,
  *   rmseFit: number,
  *   N: number
@@ -22,8 +24,8 @@ import { Matrix } from 'ml-matrix'
 const fitZCorrection = (data) => {
   const N = data.length
   const cols = data[0].length
-  if (N < 10) {
-    throw new Error(`Need at least 10 samples for quadratic Z fit, got ${N}`)
+  if (N < 4) {
+    throw new Error(`Need at least 4 samples for affine Z fit, got ${N}`)
   }
 
   let xt, yt, zt, zm
@@ -41,11 +43,7 @@ const fitZCorrection = (data) => {
     throw new Error(`Expected 4 or 6 columns, got ${cols}`)
   }
 
-  // design matrix [1, x, y, z, x², y², z², xy, xz, yz]  (N×10)
-  const A = new Matrix(xt.map((x, i) => {
-    const y = yt[i], z = zt[i]
-    return [1, x, y, z, x * x, y * y, z * z, x * y, x * z, y * z]
-  }))
+  const A = new Matrix(xt.map((x, i) => [1, x, yt[i], zt[i]]))
   const b = Matrix.columnVector(zm)
 
   const At = A.transpose()
@@ -63,7 +61,7 @@ const fitZCorrection = (data) => {
   }
 
   return {
-    cz: /** @type {[number, number, number, number, number, number, number, number, number, number]} */ (cz),
+    cz: /** @type {[number, number, number, number]} */ (cz),
     rmseRaw: Math.sqrt(ssRaw / N),
     rmseFit: Math.sqrt(ssFit / N),
     N

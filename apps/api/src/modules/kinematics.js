@@ -150,72 +150,35 @@ const IK = ({ x, y, z }, options) => {
 }
 
 /**
- * Evaluate the forward quadratic mapping at (x, y).
- * f(x,y) = c[0] + c[1]*x + c[2]*y + c[3]*x² + c[4]*x*y + c[5]*y²
- * @param {XYCorrectionCoeffs} c
- * @param {number} x
- * @param {number} y
- */
-const evalPoly = (c, x, y) =>
-  c[0] + c[1] * x + c[2] * y + c[3] * x * x + c[4] * x * y + c[5] * y * y
-
-/**
- * Pre-distort target XY by inverting the fitted quadratic mapping via Newton's method.
- * Model: xm = fx(xt, yt), ym = fy(xt, yt)  (quadratic polynomials)
- * Finds (xi, yi) such that fx(xi, yi) = x_desired, fy(xi, yi) = y_desired.
+ * Pre-distort target XY by inverting the fitted affine mapping.
+ * Model: [xm; ym] = B * [xt; yt] + t
+ *   where B = [[cx[1],cx[2]],[cy[1],cy[2]]], t = [cx[0],cy[0]]
+ * Correction: p_corrected = B^-1 * (p_desired - t)
  * @param {KinematicsOutput} P
  * @returns {KinematicsOutput}
  */
 const applyXYCorrection = ({ x, y, z }) => {
   const { cx, cy } = xyCorr
-  let xi = x, yi = y
-  for (let iter = 0; iter < 10; iter++) {
-    const fx = evalPoly(cx, xi, yi) - x
-    const fy = evalPoly(cy, xi, yi) - y
-    if (fx * fx + fy * fy < 1e-12) break
-    // Jacobian: J = [dfx/dx dfx/dy; dfy/dx dfy/dy]
-    const j00 = cx[1] + 2 * cx[3] * xi + cx[4] * yi
-    const j01 = cx[2] + cx[4] * xi + 2 * cx[5] * yi
-    const j10 = cy[1] + 2 * cy[3] * xi + cy[4] * yi
-    const j11 = cy[2] + cy[4] * xi + 2 * cy[5] * yi
-    const det = j00 * j11 - j01 * j10
-    xi -= ( j11 * fx - j01 * fy) / det
-    yi -= (-j10 * fx + j00 * fy) / det
+  const det = cx[1] * cy[2] - cx[2] * cy[1]
+  const dx = x - cx[0]
+  const dy = y - cy[0]
+  return {
+    x: ( cy[2] * dx - cx[2] * dy) / det,
+    y: (-cy[1] * dx + cx[1] * dy) / det,
+    z
   }
-  return { x: xi, y: yi, z }
 }
 
 /**
- * Evaluate the forward quadratic Z mapping.
- * fz(x,y,z) = cz[0] + cz[1]*x + cz[2]*y + cz[3]*z + cz[4]*x² + cz[5]*y²
- *            + cz[6]*z² + cz[7]*x*y + cz[8]*x*z + cz[9]*y*z
- * @param {ZCorrectionCoeffs} cz
- * @param {number} x
- * @param {number} y
- * @param {number} z
- */
-const evalPolyZ = (cz, x, y, z) =>
-  cz[0] + cz[1] * x + cz[2] * y + cz[3] * z +
-  cz[4] * x * x + cz[5] * y * y + cz[6] * z * z +
-  cz[7] * x * y + cz[8] * x * z + cz[9] * y * z
-
-/**
- * Pre-distort target Z by inverting the fitted quadratic Z mapping via Newton's method.
- * Finds zi such that fz(x, y, zi) = z_desired (x, y are held fixed).
+ * Pre-distort target Z by inverting the fitted affine Z mapping.
+ * Model: zm = cz[0] + cz[1]*x + cz[2]*y + cz[3]*z
+ * Correction: zi = (z_desired - cz[0] - cz[1]*x - cz[2]*y) / cz[3]
  * @param {KinematicsOutput} P
  * @returns {KinematicsOutput}
  */
 const applyZCorrection = ({ x, y, z }) => {
   const { cz } = zCorr
-  let zi = z
-  for (let iter = 0; iter < 10; iter++) {
-    const fz = evalPolyZ(cz, x, y, zi) - z
-    if (fz * fz < 1e-12) break
-    // dfz/dz = cz[3] + 2*cz[6]*z + cz[8]*x + cz[9]*y
-    const dfdz = cz[3] + 2 * cz[6] * zi + cz[8] * x + cz[9] * y
-    zi -= fz / dfdz
-  }
-  return { x, y, z: zi }
+  return { x, y, z: (z - cz[0] - cz[1] * x - cz[2] * y) / cz[3] }
 }
 
 /**

@@ -27,16 +27,13 @@ const geomSchema = z.record(
   z.enum(['H', 'L1', 'L2', 'L3', 'dX']),
   z.number().optional()
 )
-const xyCoeffsSchema = z.tuple([z.number(), z.number(), z.number(), z.number(), z.number(), z.number()])
+const xyCoeffsSchema = z.tuple([z.number(), z.number(), z.number()])
 const xyCorrectionSchema = z.object({
   cx: xyCoeffsSchema,
   cy: xyCoeffsSchema
 }).partial()
 
-const zCoeffsSchema = z.tuple([
-  z.number(), z.number(), z.number(), z.number(), z.number(),
-  z.number(), z.number(), z.number(), z.number(), z.number()
-])
+const zCoeffsSchema = z.tuple([z.number(), z.number(), z.number(), z.number()])
 const zCorrectionSchema = z.object({
   cz: zCoeffsSchema
 }).partial()

@@ -29,10 +29,10 @@ if (mode === 'xy') {
     }
   }
   const result = fitXYCorrection(data)
-  console.log('\n--- XY Position-Space Fitting (quadratic) ---')
+  console.log('\n--- XY Position-Space Fitting (affine) ---')
   console.log(`Samples:     ${result.N}`)
   console.log(`Raw RMSE:    ${result.rmseRaw.toFixed(4)} mm  (before correction)`)
-  console.log(`Fit RMSE:    ${result.rmseFit.toFixed(4)} mm  (residual after quadratic model)`)
+  console.log(`Fit RMSE:    ${result.rmseFit.toFixed(4)} mm  (residual after affine model)`)
   console.log(`cx: [${result.cx.map(fmt).join(', ')}]`)
   console.log(`cy: [${result.cy.map(fmt).join(', ')}]`)
   console.log('\nConfig JSON:')
@@ -50,10 +50,10 @@ if (mode === 'xy') {
     }
   }
   const result = fitZCorrection(data)
-  console.log('\n--- Z Position-Space Fitting (quadratic) ---')
+  console.log('\n--- Z Position-Space Fitting (affine) ---')
   console.log(`Samples:     ${result.N}`)
   console.log(`Raw RMSE:    ${result.rmseRaw.toFixed(4)} mm  (before correction)`)
-  console.log(`Fit RMSE:    ${result.rmseFit.toFixed(4)} mm  (residual after quadratic model)`)
+  console.log(`Fit RMSE:    ${result.rmseFit.toFixed(4)} mm  (residual after affine model)`)
   console.log(`cz: [${result.cz.map(fmt).join(', ')}]`)
   console.log('\nConfig JSON:')
   console.log(JSON.stringify({ zCorrection: { cz: result.cz } }, null, 2))

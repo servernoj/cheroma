@@ -72,12 +72,12 @@ declare global {
     gpio: GpioConfig
     digitizer: Digitizer
   }
-  type XYCorrectionCoeffs = [number, number, number, number, number, number]
+  type XYCorrectionCoeffs = [number, number, number]
   type XYCorrection = {
     cx: XYCorrectionCoeffs
     cy: XYCorrectionCoeffs
   }
-  type ZCorrectionCoeffs = [number, number, number, number, number, number, number, number, number, number]
+  type ZCorrectionCoeffs = [number, number, number, number]
   type ZCorrection = {
     cz: ZCorrectionCoeffs
   }

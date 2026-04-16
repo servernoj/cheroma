@@ -8,8 +8,9 @@ import { IKK } from '@/modules/kinematics.js'
 import * as servo from '@/modules/servo.js'
 import * as gpio from '@/modules/drivers/gpio.js'
 import * as digitizer from '@/modules/digitizer.js'
-import { median, sleep } from '@/modules/utils.js'
+import { median, roundFactory, sleep } from '@/modules/utils.js'
 import { performance } from 'node:perf_hooks'
+const rounder = roundFactory(2)
 
 let dtMs = Infinity
 
@@ -114,7 +115,7 @@ const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) =
         const preTarget = { ...target, z: target.z + elevationMm }
 
         await servo.toPoint(IKK(preTarget), [], { relax: false })
-        await sleep(1000)
+        await sleep(1500)
 
         const trajectory = buildVerticalDescentTrajectory(
           target.x,
@@ -171,7 +172,9 @@ const runCalibrationSequence = async ({ origin, grid, start, stepMm, repeat }) =
           bestIdx = i
         }
       }
-      data.push(poseData[bestIdx])
+      const rawData = poseData[bestIdx]
+      console.log(rawData.map(rounder).join(','))
+      data.push(rawData)
     }
   }
   await servo.toPoint(servo.getPosePosition('home'), [], { relax: true })

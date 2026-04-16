@@ -1,18 +1,22 @@
 import { Matrix, inverse } from 'ml-matrix'
 
 /**
- * Fit quadratic mapping from target XY to measured XY.
+ * Fit affine mapping from target XY to measured XY.
  *
  * Model:
- *   xm = cx[0] + cx[1]*x + cx[2]*y + cx[3]*x² + cx[4]*x*y + cx[5]*y²
- *   ym = cy[0] + cy[1]*x + cy[2]*y + cy[3]*x² + cy[4]*x*y + cy[5]*y²
+ *   xm = cx[0] + cx[1]*x + cx[2]*y
+ *   ym = cy[0] + cy[1]*x + cy[2]*y
  *
- * Identity: cx = [0,1,0,0,0,0], cy = [0,0,1,0,0,0].
+ * Identity: cx = [0,1,0], cy = [0,0,1].
+ *
+ * Correction (applied before IK):
+ *   p_corrected = B^-1 * (p_desired - t)
+ *   where B = [[cx[1],cx[2]],[cy[1],cy[2]]], t = [cx[0],cy[0]]
  *
  * @param {number[][]} data  N×4 array, each row [x_target, y_target, x_measured, y_measured]
  * @returns {{
- *   cx: [number, number, number, number, number, number],
- *   cy: [number, number, number, number, number, number],
+ *   cx: [number, number, number],
+ *   cy: [number, number, number],
  *   rmseRaw: number,
  *   rmseFit: number,
  *   N: number
@@ -20,8 +24,8 @@ import { Matrix, inverse } from 'ml-matrix'
  */
 const fitXYCorrection = (data) => {
   const N = data.length
-  if (N < 6) {
-    throw new Error(`Need at least 6 samples for quadratic fit, got ${N}`)
+  if (N < 3) {
+    throw new Error(`Need at least 3 samples, got ${N}`)
   }
 
   const xt = data.map(r => r[0])
@@ -29,11 +33,7 @@ const fitXYCorrection = (data) => {
   const xm = data.map(r => r[2])
   const ym = data.map(r => r[3])
 
-  // design matrix A = [1, x, y, x², x*y, y²]  (N×6)
-  const A = new Matrix(xt.map((x, i) => {
-    const y = yt[i]
-    return [1, x, y, x * x, x * y, y * y]
-  }))
+  const A = new Matrix(xt.map((x, i) => [1, x, yt[i]]))
   const bx = Matrix.columnVector(xm)
   const by = Matrix.columnVector(ym)
 
@@ -42,7 +42,6 @@ const fitXYCorrection = (data) => {
   const cx = solve.mmul(bx).to1DArray()
   const cy = solve.mmul(by).to1DArray()
 
-  // residuals
   const xmPred = A.mmul(Matrix.columnVector(cx)).to1DArray()
   const ymPred = A.mmul(Matrix.columnVector(cy)).to1DArray()
 
@@ -58,8 +57,8 @@ const fitXYCorrection = (data) => {
   }
 
   return {
-    cx: /** @type {[number, number, number, number, number, number]} */ (cx),
-    cy: /** @type {[number, number, number, number, number, number]} */ (cy),
+    cx: /** @type {[number, number, number]} */ (cx),
+    cy: /** @type {[number, number, number]} */ (cy),
     rmseRaw: Math.sqrt(ssRaw / N),
     rmseFit: Math.sqrt(ssFit / N),
     N
