@@ -1,8 +1,10 @@
 import express from 'express'
 import { runCalibrationSequence } from '@/modules/calibration.js'
+import { enabled } from '@/modules/drivers/digitizer.js'
 import { validator } from '@/controller/mw/index.js'
 import z from 'zod'
 import { roundFactory } from '@/modules/utils.js'
+import { ServiceUnavailableError } from 'http-errors-enhanced'
 
 const router = express.Router()
 
@@ -28,6 +30,9 @@ router.post(
     })
   }),
   async (req, res) => {
+    if (!enabled) {
+      throw new ServiceUnavailableError('Digitizer is not enabled')
+    }
     const { origin, grid, start, stepMm, repeat } = res.locals.parsed.body
     // data: number[][] — each row [x_target, y_target, x_measured, y_measured]
     const data = await runCalibrationSequence({ origin, grid, start, stepMm, repeat })

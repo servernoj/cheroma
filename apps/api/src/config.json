@@ -17,6 +17,7 @@
       "intPin": 27
     },
     "digitizer": {
+      "enabled": false,
       "mcp23017": [
         {
           "address": 32,
@@ -433,15 +434,15 @@
   },
   "pieces": {
     "q": {
-      "height": 70,
+      "height": 65,
       "desc": "queen"
     },
     "k": {
-      "height": 75,
+      "height": 60,
       "desc": "king"
     },
     "p": {
-      "height": 35,
+      "height": 36,
       "desc": "pawn"
     },
     "b": {
@@ -453,7 +454,7 @@
       "desc": "knight"
     },
     "r": {
-      "height": 50,
+      "height": 45,
       "desc": "rook"
     }
   },
@@ -470,13 +471,18 @@
     ]
   },
   "zCorrection": {
-    "cz": [0, 0, 0, 1]
+    "cz": [
+      0,
+      0,
+      0,
+      1
+    ]
   },
   "geom": {
     "H": 131,
     "L1": 211,
     "L2": 265,
-    "L3": 125,
+    "L3": 140,
     "dX": 20
   }
 }

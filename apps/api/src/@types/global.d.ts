@@ -56,15 +56,15 @@ declare global {
     dtMs: number
   }
   type Mcp23017Config = {
-    addresse: number,
-    target: 'r' | 'c',
+    address: number,
+    target: 'r' | 'c'
     offset: 0 | 16
   }
   type GpioConfig = {
     intPin?: number
   }
   type Digitizer = {
-    elevationMm: number,
+    enabled: boolean
     mcp23017: Array<Mcp23017Config>
   }
   type Drivers = {

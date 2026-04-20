@@ -1,8 +1,9 @@
 import express from 'express'
 import * as digitizer from '@/modules/digitizer.js'
-import { addresses as mcpAddresses } from '@/modules/drivers/digitizer.js'
+import { addresses as mcpAddresses, enabled } from '@/modules/drivers/digitizer.js'
 import { readRegister, writeRegister } from '@/modules/i2c.js'
 import { validator } from '@/controller/mw/index.js'
+import { ServiceUnavailableError } from 'http-errors-enhanced'
 import z from 'zod'
 
 const router = express.Router()
@@ -21,6 +22,9 @@ router.get(
     })
   }),
   async (req, res) => {
+    if (!enabled) {
+      throw new ServiceUnavailableError('Digitizer is not enabled')
+    }
     const { timeout_sec: timeoutSec } = res.locals.parsed.query
     const data = await digitizer.runPollUntilInterrupt(timeoutSec)
     if (data === null) {
@@ -44,6 +48,9 @@ router.get(
     })
   }),
   async (req, res) => {
+    if (!enabled) {
+      throw new ServiceUnavailableError('Digitizer is not enabled')
+    }
     const { address, register, length } = res.locals.parsed.query
     const buf = await readRegister(register, length, address)
     res.json({ address, register, data: [...buf] })
@@ -60,6 +67,9 @@ router.post(
     })
   }),
   async (req, res) => {
+    if (!enabled) {
+      throw new ServiceUnavailableError('Digitizer is not enabled')
+    }
     const { address, register, data } = res.locals.parsed.body
     await writeRegister(register, data, address)
     res.status(204).send()

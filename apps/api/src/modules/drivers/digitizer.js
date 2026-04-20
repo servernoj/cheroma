@@ -5,17 +5,21 @@ import { keyBy, map } from 'lodash-es'
 let addresses = []
 let unitByAddress = {}
 let targets = []
+let enabled = false
 
-subscribe((config) => {
-  const units = config?.drivers?.digitizer?.mcp23017 ?? []
-  if (units.length === 0) {
-    throw new Error('config.drivers.digitizer.mcp23017 must be a non-empty array')
-  }
+subscribe(
+  /** @param {Config} config */
+  (config) => {
+    enabled = config?.drivers?.digitizer?.enabled
+    const units = config?.drivers?.digitizer?.mcp23017 ?? []
+    if (units.length === 0) {
+      throw new Error('config.drivers.digitizer.mcp23017 must be a non-empty array')
+    }
 
-  addresses = units.map(({ address }) => address)
-  unitByAddress = keyBy(units, ({ address }) => `0x${address.toString(16)}`)
-  targets = [...new Set(map(units, 'target'))]
-}, { immediate: true })
+    addresses = units.map(({ address }) => address)
+    unitByAddress = keyBy(units, ({ address }) => `0x${address.toString(16)}`)
+    targets = [...new Set(map(units, 'target'))]
+  }, { immediate: true })
 
 const R = {
   IODIR: 0x00,
@@ -51,14 +55,17 @@ const initUnit = async (addr) => {
  * and reads GPIO on each to clear any pending interrupt (releases INTA/INTB).
  */
 const init = async () => {
-  for (const addr of addresses) {
-    await initUnit(addr)
-    await readRegister(R.GPIO, 2, addr)
+  if (enabled) {
+    for (const addr of addresses) {
+      await initUnit(addr)
+      await readRegister(R.GPIO, 2, addr)
+    }
   }
 }
 
 export {
   init,
+  enabled,
   addresses,
   unitByAddress,
   targets,
